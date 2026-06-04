@@ -1,4 +1,29 @@
+using App.DAL.EF;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+
 var builder = WebApplication.CreateBuilder(args);
+
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ??
+                       throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+builder.Services.AddDbContext<AppDbContext>(options =>
+{
+    options.UseNpgsql(
+            connectionString,
+            o => o.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery))
+        .ConfigureWarnings(w =>
+            w.Throw(RelationalEventId.MultipleCollectionIncludeWarning))
+        .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTrackingWithIdentityResolution);
+
+    if (!builder.Environment.IsProduction())
+    {
+        options.EnableDetailedErrors()
+            .EnableSensitiveDataLogging();
+    }
+});
+builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+
+
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
