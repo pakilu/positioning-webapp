@@ -1,3 +1,6 @@
 <Solution>
   <Project Path="WebApp/WebApp.csproj" />
+  <Project Path="App.Domain/App.Domain.csproj" />
+  <Project Path="App.DAL.EF/App.DAL.EF.csproj" />
+  <Project Path="App.BLL/App.BLL.csproj" />
 </Solution>

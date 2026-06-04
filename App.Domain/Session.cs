@@ -8,7 +8,7 @@ public class Session
 
     public string Name { get; set; } = default!;
 
-    public SessionStatus Status { get; set; } = SessionStatus.Created;
+    public ESessionStatus Status { get; set; } = ESessionStatus.Created;
 
     public DateTime? StartedAt { get; set; }
 

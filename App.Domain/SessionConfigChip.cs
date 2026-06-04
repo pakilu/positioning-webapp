@@ -8,7 +8,7 @@ public class SessionConfigChip
 
     public Guid ChipId { get; set; }
 
-    public ChipRole Role { get; set; }
+    public EChipRole Role { get; set; }
 
     // Required for anchors, null for tags
     public decimal? XCoord { get; set; }

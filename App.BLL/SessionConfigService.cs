@@ -1,15 +1,17 @@
-﻿namespace App.BLL;
+﻿using App.Domain;
+
+namespace App.BLL;
 
 public class SessionConfigService
 {
     public void ValidateSessionConfig(SessionConfig config)
     {
         var anchors = config.SessionConfigChips
-            .Where(x => x.Role == ChipRole.Anchor)
+            .Where(x => x.Role == EChipRole.Anchor)
             .ToList();
 
         var tags = config.SessionConfigChips
-            .Where(x => x.Role == ChipRole.Tag)
+            .Where(x => x.Role == EChipRole.Tag)
             .ToList();
 
         if (anchors.Count < 3)

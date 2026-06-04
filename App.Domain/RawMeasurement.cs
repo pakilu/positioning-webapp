@@ -1,4 +1,4 @@
-namespace PositioningSystem.Domain;
+namespace App.Domain;
 
 public class RawMeasurement
 {
