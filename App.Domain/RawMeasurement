@@ -1,0 +1,32 @@
+namespace PositioningSystem.Domain;
+
+public class RawMeasurement
+{
+    public int Id { get; set; }
+
+    public int SessionId { get; set; }
+
+    public int TagChipId { get; set; }
+
+    public int AnchorChipId { get; set; }
+
+    public DateTime RecordedAt { get; set; }
+
+    public decimal? Distance { get; set; }
+
+    public decimal? Rssi { get; set; }
+
+    public decimal? Snr { get; set; }
+
+    public decimal? Quality { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+
+
+    // Navigation properties
+    public Session Session { get; set; } = default!;
+
+    public Chip TagChip { get; set; } = default!;
+
+    public Chip AnchorChip { get; set; } = default!;
+}
