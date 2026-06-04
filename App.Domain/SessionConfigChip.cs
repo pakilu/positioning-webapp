@@ -2,11 +2,11 @@ namespace App.Domain;
 
 public class SessionConfigChip
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
 
-    public int SessionConfigId { get; set; }
+    public Guid SessionConfigId { get; set; }
 
-    public int ChipId { get; set; }
+    public Guid ChipId { get; set; }
 
     public ChipRole Role { get; set; }
 

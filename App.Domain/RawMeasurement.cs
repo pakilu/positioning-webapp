@@ -2,13 +2,13 @@ namespace PositioningSystem.Domain;
 
 public class RawMeasurement
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
 
-    public int SessionId { get; set; }
+    public Guid SessionId { get; set; }
 
-    public int TagChipId { get; set; }
+    public Guid TagChipId { get; set; }
 
-    public int AnchorChipId { get; set; }
+    public Guid AnchorChipId { get; set; }
 
     public DateTime RecordedAt { get; set; }
 

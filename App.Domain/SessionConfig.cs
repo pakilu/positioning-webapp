@@ -2,7 +2,7 @@ namespace App.Domain;
 
 public class SessionConfig
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
 
     public string Name { get; set; } = default!;
 

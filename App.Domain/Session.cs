@@ -2,9 +2,9 @@ namespace App.Domain;
 
 public class Session
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
 
-    public int SessionConfigId { get; set; }
+    public Guid SessionConfigId { get; set; }
 
     public string Name { get; set; } = default!;
 
