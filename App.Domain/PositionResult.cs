@@ -8,7 +8,7 @@ public class PositionResult
 
     public Guid TagChipId { get; set; }
 
-    public DateTime RecordedAt { get; set; }
+    public DateTime RecordedAt { get; set; } = DateTime.UtcNow;
 
     public decimal XCoord { get; set; }
 
@@ -18,7 +18,7 @@ public class PositionResult
 
     public decimal? Accuracy { get; set; }
 
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
 
     // Navigation properties

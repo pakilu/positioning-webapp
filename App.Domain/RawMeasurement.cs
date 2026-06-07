@@ -10,7 +10,7 @@ public class RawMeasurement
 
     public Guid AnchorChipId { get; set; }
 
-    public DateTime RecordedAt { get; set; }
+    public DateTime RecordedAt { get; set; } = DateTime.UtcNow;
 
     public decimal? Distance { get; set; }
 
@@ -20,7 +20,7 @@ public class RawMeasurement
 
     public decimal? Quality { get; set; }
 
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
 
     // Navigation properties
