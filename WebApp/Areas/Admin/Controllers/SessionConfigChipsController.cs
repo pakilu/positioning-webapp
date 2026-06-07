@@ -57,6 +57,8 @@ namespace WebApp.Areas.Admin.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create([Bind("Id,SessionConfigId,ChipId,Role,XCoord,YCoord,ZCoord,CreatedAt,UpdatedAt")] SessionConfigChip sessionConfigChip)
         {
+            ModelState.Remove(nameof(SessionConfigChip.SessionConfig));
+            ModelState.Remove(nameof(SessionConfigChip.Chip));
             if (ModelState.IsValid)
             {
                 sessionConfigChip.Id = Guid.NewGuid();
@@ -99,6 +101,8 @@ namespace WebApp.Areas.Admin.Controllers
                 return NotFound();
             }
 
+            ModelState.Remove(nameof(SessionConfigChip.SessionConfig));
+            ModelState.Remove(nameof(SessionConfigChip.Chip));
             if (ModelState.IsValid)
             {
                 try

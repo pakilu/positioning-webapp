@@ -55,6 +55,7 @@ namespace WebApp.Areas.Admin.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create([Bind("Id,SessionConfigId,Name,Status,StartedAt,EndedAt,CreatedAt,UpdatedAt")] Session session)
         {
+            ModelState.Remove(nameof(Session.SessionConfig));
             if (ModelState.IsValid)
             {
                 session.Id = Guid.NewGuid();
@@ -95,6 +96,7 @@ namespace WebApp.Areas.Admin.Controllers
                 return NotFound();
             }
 
+            ModelState.Remove(nameof(Session.SessionConfig));
             if (ModelState.IsValid)
             {
                 try
