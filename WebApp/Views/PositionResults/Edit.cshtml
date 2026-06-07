@@ -1,0 +1,69 @@
+@model App.Domain.PositionResult
+
+@{
+    ViewData["Title"] = "Edit";
+}
+
+<h1>Edit</h1>
+
+<h4>PositionResult</h4>
+<hr />
+<div class="row">
+    <div class="col-md-4">
+        <form asp-action="Edit">
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+            <input type="hidden" asp-for="Id" />
+            <div class="form-group">
+                <label asp-for="SessionId" class="control-label"></label>
+                <select asp-for="SessionId" class="form-control" asp-items="ViewBag.SessionId"></select>
+                <span asp-validation-for="SessionId" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="TagChipId" class="control-label"></label>
+                <select asp-for="TagChipId" class="form-control" asp-items="ViewBag.TagChipId"></select>
+                <span asp-validation-for="TagChipId" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="RecordedAt" class="control-label"></label>
+                <input asp-for="RecordedAt" class="form-control" />
+                <span asp-validation-for="RecordedAt" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="XCoord" class="control-label"></label>
+                <input asp-for="XCoord" class="form-control" />
+                <span asp-validation-for="XCoord" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="YCoord" class="control-label"></label>
+                <input asp-for="YCoord" class="form-control" />
+                <span asp-validation-for="YCoord" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="ZCoord" class="control-label"></label>
+                <input asp-for="ZCoord" class="form-control" />
+                <span asp-validation-for="ZCoord" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="Accuracy" class="control-label"></label>
+                <input asp-for="Accuracy" class="form-control" />
+                <span asp-validation-for="Accuracy" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="CreatedAt" class="control-label"></label>
+                <input asp-for="CreatedAt" class="form-control" />
+                <span asp-validation-for="CreatedAt" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <input type="submit" value="Save" class="btn btn-primary" />
+            </div>
+        </form>
+    </div>
+</div>
+
+<div>
+    <a asp-action="Index">Back to List</a>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}

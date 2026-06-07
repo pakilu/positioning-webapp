@@ -1,0 +1,74 @@
+@model App.Domain.RawMeasurement
+
+@{
+    ViewData["Title"] = "Edit";
+}
+
+<h1>Edit</h1>
+
+<h4>RawMeasurement</h4>
+<hr />
+<div class="row">
+    <div class="col-md-4">
+        <form asp-action="Edit">
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+            <input type="hidden" asp-for="Id" />
+            <div class="form-group">
+                <label asp-for="SessionId" class="control-label"></label>
+                <select asp-for="SessionId" class="form-control" asp-items="ViewBag.SessionId"></select>
+                <span asp-validation-for="SessionId" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="TagChipId" class="control-label"></label>
+                <select asp-for="TagChipId" class="form-control" asp-items="ViewBag.TagChipId"></select>
+                <span asp-validation-for="TagChipId" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="AnchorChipId" class="control-label"></label>
+                <select asp-for="AnchorChipId" class="form-control" asp-items="ViewBag.AnchorChipId"></select>
+                <span asp-validation-for="AnchorChipId" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="RecordedAt" class="control-label"></label>
+                <input asp-for="RecordedAt" class="form-control" />
+                <span asp-validation-for="RecordedAt" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="Distance" class="control-label"></label>
+                <input asp-for="Distance" class="form-control" />
+                <span asp-validation-for="Distance" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="Rssi" class="control-label"></label>
+                <input asp-for="Rssi" class="form-control" />
+                <span asp-validation-for="Rssi" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="Snr" class="control-label"></label>
+                <input asp-for="Snr" class="form-control" />
+                <span asp-validation-for="Snr" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="Quality" class="control-label"></label>
+                <input asp-for="Quality" class="form-control" />
+                <span asp-validation-for="Quality" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="CreatedAt" class="control-label"></label>
+                <input asp-for="CreatedAt" class="form-control" />
+                <span asp-validation-for="CreatedAt" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <input type="submit" value="Save" class="btn btn-primary" />
+            </div>
+        </form>
+    </div>
+</div>
+
+<div>
+    <a asp-action="Index">Back to List</a>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}

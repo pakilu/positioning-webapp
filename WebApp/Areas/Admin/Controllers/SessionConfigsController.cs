@@ -1,0 +1,158 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.EntityFrameworkCore;
+using App.DAL.EF;
+using App.Domain;
+
+namespace WebApp.Areas_Admin_Controllers
+{
+    public class SessionConfigsController : Controller
+    {
+        private readonly AppDbContext _context;
+
+        public SessionConfigsController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        // GET: SessionConfigs
+        public async Task<IActionResult> Index()
+        {
+            return View(await _context.SessionConfigs.ToListAsync());
+        }
+
+        // GET: SessionConfigs/Details/5
+        public async Task<IActionResult> Details(Guid? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var sessionConfig = await _context.SessionConfigs
+                .FirstOrDefaultAsync(m => m.Id == id);
+            if (sessionConfig == null)
+            {
+                return NotFound();
+            }
+
+            return View(sessionConfig);
+        }
+
+        // GET: SessionConfigs/Create
+        public IActionResult Create()
+        {
+            return View();
+        }
+
+        // POST: SessionConfigs/Create
+        // To protect from overposting attacks, enable the specific properties you want to bind to.
+        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Create([Bind("Id,Name,Description,PlannedDurationSeconds,CreatedAt,UpdatedAt")] SessionConfig sessionConfig)
+        {
+            if (ModelState.IsValid)
+            {
+                sessionConfig.Id = Guid.NewGuid();
+                _context.Add(sessionConfig);
+                await _context.SaveChangesAsync();
+                return RedirectToAction(nameof(Index));
+            }
+            return View(sessionConfig);
+        }
+
+        // GET: SessionConfigs/Edit/5
+        public async Task<IActionResult> Edit(Guid? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var sessionConfig = await _context.SessionConfigs.FindAsync(id);
+            if (sessionConfig == null)
+            {
+                return NotFound();
+            }
+            return View(sessionConfig);
+        }
+
+        // POST: SessionConfigs/Edit/5
+        // To protect from overposting attacks, enable the specific properties you want to bind to.
+        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(Guid id, [Bind("Id,Name,Description,PlannedDurationSeconds,CreatedAt,UpdatedAt")] SessionConfig sessionConfig)
+        {
+            if (id != sessionConfig.Id)
+            {
+                return NotFound();
+            }
+
+            if (ModelState.IsValid)
+            {
+                try
+                {
+                    _context.Update(sessionConfig);
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    if (!SessionConfigExists(sessionConfig.Id))
+                    {
+                        return NotFound();
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+                return RedirectToAction(nameof(Index));
+            }
+            return View(sessionConfig);
+        }
+
+        // GET: SessionConfigs/Delete/5
+        public async Task<IActionResult> Delete(Guid? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var sessionConfig = await _context.SessionConfigs
+                .FirstOrDefaultAsync(m => m.Id == id);
+            if (sessionConfig == null)
+            {
+                return NotFound();
+            }
+
+            return View(sessionConfig);
+        }
+
+        // POST: SessionConfigs/Delete/5
+        [HttpPost, ActionName("Delete")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteConfirmed(Guid id)
+        {
+            var sessionConfig = await _context.SessionConfigs.FindAsync(id);
+            if (sessionConfig != null)
+            {
+                _context.SessionConfigs.Remove(sessionConfig);
+            }
+
+            await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(Index));
+        }
+
+        private bool SessionConfigExists(Guid id)
+        {
+            return _context.SessionConfigs.Any(e => e.Id == id);
+        }
+    }
+}
