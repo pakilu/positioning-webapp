@@ -1,0 +1,222 @@
+ 1. The big picture                                                                                                                                                                 
+                                                                                                                                                                                    
+ ```                                                                                                                                                                                
+   [ESP32+DW3000 anchors] ──┐                                                                                                                                                       
+                            │  Wi-Fi                                                                                                                                                
+   [ESP32+DW3000 tag(s)]  ──┤────► [Gateway/Coordinator]  ──HTTP/WebSocket──► [ASP.NET WebApp]                                                                                      
+                            │       (one ESP32 OR MQTT broker                       │                                                                                               
+                            │        OR direct from each node)                      ▼                                                                                               
+                                                                                 Postgres                                                                                           
+                                                                                    │                                                                                               
+                                                                                    ▼                                                                                               
+                                                                               Browser UI                                                                                           
+                                                                               (SignalR live map)                                                                                   
+ ```                                                                                                                                                                                
+                                                                                                                                                                                    
+ You have three realistic architecture choices. Pick one:                                                                                                                           
+                                                                                                                                                                                    
+ A. Each ESP32 talks directly to the webapp over HTTP/WebSocket — simplest, but every chip needs Wi‑Fi creds + your server URL, and the chips do their own ranging via DW3000 radio 
+ between each other.                                                                                                                                                                
+                                                                                                                                                                                    
+ B. One ESP32 acts as a "gateway" — anchors do UWB ranging with the tag, the tag (or one designated anchor) collects all distance results via UWB and forwards over Wi‑Fi/HTTP to   
+ the server. This matches how most DW3000 demo sketches (Makerfabs, Qorvo) already work.                                                                                            
+                                                                                                                                                                                    
+ C. MQTT broker in the middle — chips publish to topics, your webapp subscribes. Best if you'll have many nodes.                                                                    
+                                                                                                                                                                                    
+ For a small system I'd start with B.                                                                                                                                               
+                                                                                                                                                                                    
+ 2. Device identity — how chips become entities                                                                                                                                     
+                                                                                                                                                                                    
+ Your Chip already has DeviceIdentifier. Use the DW3000/ESP32 MAC or a short UWB short address (e.g. "A1B2" or "24:6F:28:...") as the DeviceIdentifier. Flash each board with a     
+ unique ID in NVS/EEPROM.                                                                                                                                                           
+                                                                                                                                                                                    
+ Workflow:                                                                                                                                                                          
+ 1. Boot ESP32, it has a hardcoded/NVS device_id.                                                                                                                                   
+ 2. On first contact, it POSTs POST /api/chips/register with { deviceIdentifier, firmwareVersion, role: "anchor"|"tag" }.                                                           
+ 3. The server either creates a new Chip row or returns the existing one's Id (Guid).                                                                                               
+ 4. The ESP32 caches that Guid (or just keeps using its short ID; the server resolves).                                                                                             
+ 5. In the UI you assign a Name, fixed anchor coordinates (you'll want to add XCoord/YCoord/ZCoord and IsAnchor to Chip), and put it into a SessionConfig.                          
+                                                                                                                                                                                    
+ You should add these fields to Chip.cs:                                                                                                                                            
+                                                                                                                                                                                    
+ ```csharp                                                                                                                                                                          
+   public decimal? XCoord { get; set; }   // anchor position, null for tags                                                                                                         
+   public decimal? YCoord { get; set; }                                                                                                                                             
+   public decimal? ZCoord { get; set; }                                                                                                                                             
+   public EChipRole Role { get; set; }    // Anchor | Tag                                                                                                                           
+   public DateTime? LastSeenAt { get; set; }                                                                                                                                        
+   public bool IsOnline { get; set; }                                                                                                                                               
+ ```                                                                                                                                                                                
+                                                                                                                                                                                    
+ (Add an EChipRole enum under App.Domain/Enums, then create an EF migration.)                                                                                                       
+                                                                                                                                                                                    
+ 3. Server endpoints you actually need                                                                                                                                              
+                                                                                                                                                                                    
+ Your scaffolded CRUD is fine for management, but for device ingestion add a dedicated controller — devices should not POST raw EF entities. Use DTOs:                              
+                                                                                                                                                                                    
+ ```csharp                                                                                                                                                                          
+   // WebApp/ApiControllers/IngestController.cs                                                                                                                                     
+   [ApiController, Route("api/ingest")]                                                                                                                                             
+   public class IngestController : ControllerBase                                                                                                                                   
+   {                                                                                                                                                                                
+       private readonly AppDbContext _db;                                                                                                                                           
+       private readonly IHubContext<PositioningHub> _hub;                                                                                                                           
+       public IngestController(AppDbContext db, IHubContext<PositioningHub> hub)                                                                                                    
+       { _db = db; _hub = hub; }                                                                                                                                                    
+                                                                                                                                                                                    
+       public record RegisterDto(string DeviceIdentifier, string Role, string? Firmware);                                                                                           
+       public record MeasurementDto(string TagId, string AnchorId, double Distance,                                                                                                 
+                                    double? Rssi, double? Snr, double? Quality,                                                                                                     
+                                    long? DeviceTimestampMs);                                                                                                                       
+       public record BatchDto(Guid SessionId, MeasurementDto[] Measurements);                                                                                                       
+                                                                                                                                                                                    
+       [HttpPost("register")]                                                                                                                                                       
+       public async Task<IActionResult> Register(RegisterDto dto)                                                                                                                   
+       {                                                                                                                                                                            
+           var chip = await _db.Chips.FirstOrDefaultAsync(c => c.DeviceIdentifier == dto.DeviceIdentifier);                                                                         
+           if (chip == null)                                                                                                                                                        
+           {                                                                                                                                                                        
+               chip = new Chip {                                                                                                                                                    
+                   DeviceIdentifier = dto.DeviceIdentifier,                                                                                                                         
+                   Name = dto.DeviceIdentifier,                                                                                                                                     
+                   Role = Enum.Parse<EChipRole>(dto.Role, true)                                                                                                                     
+               };                                                                                                                                                                   
+               _db.Chips.Add(chip);                                                                                                                                                 
+           }                                                                                                                                                                        
+           chip.LastSeenAt = DateTime.UtcNow;                                                                                                                                       
+           chip.IsOnline = true;                                                                                                                                                    
+           await _db.SaveChangesAsync();                                                                                                                                            
+           return Ok(new { chip.Id });                                                                                                                                              
+       }                                                                                                                                                                            
+                                                                                                                                                                                    
+       [HttpPost("measurements")]                                                                                                                                                   
+       public async Task<IActionResult> Ingest(BatchDto dto)                                                                                                                        
+       {                                                                                                                                                                            
+           // Resolve device-short-IDs → Chip.Id once                                                                                                                               
+           var ids = dto.Measurements.SelectMany(m => new[] { m.TagId, m.AnchorId }).Distinct().ToArray();                                                                          
+           var chips = await _db.Chips.Where(c => ids.Contains(c.DeviceIdentifier))                                                                                                 
+                                      .ToDictionaryAsync(c => c.DeviceIdentifier, c => c);                                                                                          
+                                                                                                                                                                                    
+           var rows = dto.Measurements.Select(m => new RawMeasurement {                                                                                                             
+               SessionId    = dto.SessionId,                                                                                                                                        
+               TagChipId    = chips[m.TagId].Id,                                                                                                                                    
+               AnchorChipId = chips[m.AnchorId].Id,                                                                                                                                 
+               Distance     = (decimal)m.Distance,                                                                                                                                  
+               Rssi  = m.Rssi  is double r ? (decimal?)r : null,                                                                                                                    
+               Snr   = m.Snr   is double s ? (decimal?)s : null,                                                                                                                    
+               Quality = m.Quality is double q ? (decimal?)q : null,                                                                                                                
+               RecordedAt = DateTime.UtcNow                                                                                                                                         
+           }).ToList();                                                                                                                                                             
+                                                                                                                                                                                    
+           _db.RawMeasurements.AddRange(rows);                                                                                                                                      
+           await _db.SaveChangesAsync();                                                                                                                                            
+                                                                                                                                                                                    
+           // Trilaterate per tag and push to UI                                                                                                                                    
+           foreach (var byTag in rows.GroupBy(r => r.TagChipId))                                                                                                                    
+           {                                                                                                                                                                        
+               var pos = Trilateration.Solve(byTag, _db);   // your math                                                                                                            
+               if (pos is not null)                                                                                                                                                 
+               {                                                                                                                                                                    
+                   _db.PositionResults.Add(new PositionResult {                                                                                                                     
+                       SessionId = dto.SessionId, TagChipId = byTag.Key,                                                                                                            
+                       XCoord = pos.X, YCoord = pos.Y, ZCoord = pos.Z, Accuracy = pos.Err                                                                                           
+                   });                                                                                                                                                              
+                   await _hub.Clients.Group($"session-{dto.SessionId}")                                                                                                             
+                       .SendAsync("position", new { tagId = byTag.Key, pos.X, pos.Y, pos.Z });                                                                                      
+               }                                                                                                                                                                    
+           }                                                                                                                                                                        
+           await _db.SaveChangesAsync();                                                                                                                                            
+           return Ok();                                                                                                                                                             
+       }                                                                                                                                                                            
+   }                                                                                                                                                                                
+ ```                                                                                                                                                                                
+                                                                                                                                                                                    
+ 4. Live updates to the browser — SignalR                                                                                                                                           
+                                                                                                                                                                                    
+ Add Microsoft.AspNetCore.SignalR (built-in). In Program.cs:                                                                                                                        
+                                                                                                                                                                                    
+ ```csharp                                                                                                                                                                          
+   builder.Services.AddSignalR();                                                                                                                                                   
+   // ...                                                                                                                                                                           
+   app.MapHub<PositioningHub>("/hubs/positioning");                                                                                                                                 
+ ```                                                                                                                                                                                
+                                                                                                                                                                                    
+ ```csharp                                                                                                                                                                          
+   public class PositioningHub : Hub {                                                                                                                                              
+       public Task JoinSession(Guid sessionId) =>                                                                                                                                   
+           Groups.AddToGroupAsync(Context.ConnectionId, $"session-{sessionId}");                                                                                                    
+   }                                                                                                                                                                                
+ ```                                                                                                                                                                                
+                                                                                                                                                                                    
+ In a Razor view, the browser connects with @microsoft/signalr (CDN), draws anchors as fixed dots and tags moving in real time on a <canvas>/SVG floorplan.                         
+                                                                                                                                                                                    
+ 5. ESP32 firmware side (C++)                                                                                                                                                       
+                                                                                                                                                                                    
+ Use WiFi.h + HTTPClient (or WebSocketsClient for lower latency). Skeleton for the gateway/tag that already has distance results from DW3000:                                       
+                                                                                                                                                                                    
+ ```cpp                                                                                                                                                                             
+   #include <WiFi.h>                                                                                                                                                                
+   #include <HTTPClient.h>                                                                                                                                                          
+   #include <ArduinoJson.h>                                                                                                                                                         
+                                                                                                                                                                                    
+   const char* WIFI_SSID="...", *WIFI_PW="...";                                                                                                                                     
+   const char* SERVER = "http://192.168.1.50:5000";                                                                                                                                 
+   const char* DEVICE_ID = "TAG-001";          // unique per board                                                                                                                  
+   const char* SESSION_ID = "....-guid-....";  // pushed via config endpoint                                                                                                        
+                                                                                                                                                                                    
+   void postMeasurements(const String& json) {                                                                                                                                      
+     HTTPClient http;                                                                                                                                                               
+     http.begin(String(SERVER) + "/api/ingest/measurements");                                                                                                                       
+     http.addHeader("Content-Type", "application/json");                                                                                                                            
+     int code = http.POST(json);                                                                                                                                                    
+     http.end();                                                                                                                                                                    
+   }                                                                                                                                                                                
+                                                                                                                                                                                    
+   void loop() {                                                                                                                                                                    
+     // 1. run DW3000 two-way ranging against each known anchor                                                                                                                     
+     //    -> dist_A1, dist_A2, dist_A3 ...                                                                                                                                         
+     StaticJsonDocument<1024> doc;                                                                                                                                                  
+     doc["sessionId"] = SESSION_ID;                                                                                                                                                 
+     JsonArray arr = doc.createNestedArray("measurements");                                                                                                                         
+     for (auto& r : ranges) {                                                                                                                                                       
+       JsonObject m = arr.createNestedObject();                                                                                                                                     
+       m["tagId"]    = DEVICE_ID;                                                                                                                                                   
+       m["anchorId"] = r.anchorId;   // e.g. "ANC-01"                                                                                                                               
+       m["distance"] = r.distanceM;                                                                                                                                                 
+       m["rssi"]     = r.rssi;                                                                                                                                                      
+     }                                                                                                                                                                              
+     String out; serializeJson(doc, out);                                                                                                                                           
+     postMeasurements(out);                                                                                                                                                         
+     delay(100); // 10 Hz                                                                                                                                                           
+   }                                                                                                                                                                                
+ ```                                                                                                                                                                                
+                                                                                                                                                                                    
+ On boot, call /api/ingest/register once for the tag.                                                                                                                               
+                                                                                                                                                                                    
+ 6. Trilateration                                                                                                                                                                   
+                                                                                                                                                                                    
+ Put the math in App.BLL (e.g. PositioningService). For 3 anchors at known (x,y) with distances d_i, do least‑squares: minimize Σ ((x−xi)² + (y−yi)² − di²)². Plenty of C# snippets 
+ exist; start with the linearised closed‑form for an MVP, upgrade to NLLS later.                                                                                                    
+                                                                                                                                                                                    
+ 7. CORS / security                                                                                                                                                                 
+                                                                                                                                                                                    
+ Add CORS so devices on the LAN can POST:                                                                                                                                           
+                                                                                                                                                                                    
+ ```csharp                                                                                                                                                                          
+   builder.Services.AddCors(o => o.AddDefaultPolicy(p =>                                                                                                                            
+       p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));                                                                                                                      
+   app.UseCors();                                                                                                                                                                   
+ ```                                                                                                                                                                                
+                                                                                                                                                                                    
+ For real deployment: require an X-Device-Token header per chip (store hash in Chip), and turn off AllowAnyOrigin.                                                                  
+                                                                                                                                                                                    
+ 8. Concrete order of work for you                                                                                                                                                  
+                                                                                                                                                                                    
+ 1. Add Role, XCoord/Y/Z, LastSeenAt, IsOnline to Chip; new migration.                                                                                                              
+ 2. Add IngestController with register + measurements DTOs above.                                                                                                                   
+ 3. Add SignalR + PositioningHub.                                                                                                                                                   
+ 4. Build a "Chips" management page (mostly done) where you set anchor coordinates + assign chips to a SessionConfig.                                                               
+ 5. Build a "Live Session" view: floorplan canvas that subscribes to the hub.                                                                                                       
+ 6. Flash 3 ESP32 anchors with fixed short IDs ANC-01/02/03, one ESP32 tag TAG-01. Get DW3000 two‑way ranging working between them first (Makerfabs/Qorvo examples), then add the   
+    HTTP POST.                                                                                                                                                                      
+ 7. Verify rows appear in RawMeasurements, PositionResults updates, and the dot moves in the browser.          
