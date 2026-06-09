@@ -1,0 +1,67 @@
+@{
+    ViewData["Title"] = "Live positioning";
+}
+
+<h1>Live positioning</h1>
+<p>
+    Status: <span id="conn-status" class="badge bg-secondary">disconnected</span>
+</p>
+
+<div class="row">
+    <div class="col-md-6">
+        <h4>Latest position results</h4>
+        <table class="table table-sm">
+            <thead>
+                <tr><th>Time</th><th>Tag</th><th>X</th><th>Y</th><th>Z</th><th>Acc.</th></tr>
+            </thead>
+            <tbody id="positions"></tbody>
+        </table>
+    </div>
+    <div class="col-md-6">
+        <h4>Latest raw measurements</h4>
+        <table class="table table-sm">
+            <thead>
+                <tr><th>Time</th><th>Tag</th><th>Anchor</th><th>Dist</th><th>RSSI</th></tr>
+            </thead>
+            <tbody id="raws"></tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+    <script src="~/js/positioning-live.js" asp-append-version="true"></script>
+    <script>
+        const MAX_ROWS = 20;
+        const statusEl = document.getElementById("conn-status");
+        const posBody  = document.getElementById("positions");
+        const rawBody  = document.getElementById("raws");
+
+        window.addEventListener("positioning:connected",    () => { statusEl.textContent = "connected";    statusEl.className = "badge bg-success"; });
+        window.addEventListener("positioning:disconnected", () => { statusEl.textContent = "disconnected"; statusEl.className = "badge bg-danger";  });
+
+        function prepend(tbody, html) {
+            tbody.insertAdjacentHTML("afterbegin", html);
+            while (tbody.rows.length > MAX_ROWS) tbody.deleteRow(tbody.rows.length - 1);
+        }
+
+        window.addEventListener("positioning:position", e => {
+            const m = e.detail;
+            prepend(posBody, `<tr>
+                <td>${new Date(m.recordedAt).toLocaleTimeString()}</td>
+                <td>${m.tagDeviceId ?? ""}</td>
+                <td>${m.xCoord}</td><td>${m.yCoord}</td><td>${m.zCoord ?? ""}</td>
+                <td>${m.accuracy ?? ""}</td></tr>`);
+        });
+
+        window.addEventListener("positioning:raw", e => {
+            const m = e.detail;
+            prepend(rawBody, `<tr>
+                <td>${new Date(m.recordedAt).toLocaleTimeString()}</td>
+                <td>${m.tagDeviceId ?? ""}</td>
+                <td>${m.anchorDeviceId ?? ""}</td>
+                <td>${m.distance ?? ""}</td>
+                <td>${m.rssi ?? ""}</td></tr>`);
+        });
+    </script>
+}
