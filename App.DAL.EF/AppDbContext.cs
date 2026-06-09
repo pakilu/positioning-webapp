@@ -1,12 +1,11 @@
 ﻿using App.Domain;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-
 namespace App.DAL.EF;
 
 public class AppDbContext : DbContext
 {
-public DbSet<Chip> Chips { get; set; } = default!;
+    public DbSet<Chip> Chips { get; set; } = default!;
     public DbSet<SessionConfig> SessionConfigs { get; set; } = default!;
     public DbSet<SessionConfigChip> SessionConfigChips { get; set; } = default!;
     public DbSet<Session> Sessions { get; set; } = default!;
@@ -79,7 +78,8 @@ public DbSet<Chip> Chips { get; set; } = default!;
         builder.Entity<PositionResult>()
             .HasOne(x => x.TagChip)
             .WithMany(x => x.PositionResultsAsTag)
-            .HasForeignKey(x => x.TagChipId);
+            .HasForeignKey(x => x.TagChipId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.Entity<RawMeasurement>()
             .HasOne(x => x.Session)
