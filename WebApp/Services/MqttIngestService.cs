@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using App.BLL.Positioning;
 using App.DAL.EF;
 using App.Domain;
 using Microsoft.AspNetCore.SignalR;
@@ -26,6 +27,7 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
     private readonly MqttOptions _options;
     private readonly IHubContext<PositioningHub> _hub;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IPositioningPipeline _pipeline;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -38,12 +40,14 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
         ILogger<MqttIngestService> logger,
         IOptions<MqttOptions> options,
         IHubContext<PositioningHub> hub,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        IPositioningPipeline pipeline)
     {
         _logger = logger;
         _options = options.Value;
         _hub = hub;
         _scopeFactory = scopeFactory;
+        _pipeline = pipeline;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -187,6 +191,7 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
     {
         msg.RecordedAt ??= DateTime.UtcNow;
 
+        // Always broadcast the raw stream to listeners.
         await _hub.Clients.All.SendAsync("RawMeasurement", msg);
         if (msg.SessionId is Guid sid)
         {
@@ -194,14 +199,12 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
                 .SendAsync("RawMeasurement", msg);
         }
 
-        var position = await TryCalculatePositionAsync(msg);
-        if (position is not null)
-        {
-            await HandlePositionAsync(position);
-        }
-
-        if (!_options.PersistToDatabase || msg.SessionId is null
-            || string.IsNullOrEmpty(msg.TagDeviceId) || string.IsNullOrEmpty(msg.AnchorDeviceId))
+        // Need a session, both device identifiers, and a distance to do
+        // anything further (chip resolution, persistence, trilateration).
+        if (msg.SessionId is null
+            || string.IsNullOrEmpty(msg.TagDeviceId)
+            || string.IsNullOrEmpty(msg.AnchorDeviceId)
+            || msg.Distance is null)
             return;
 
         using var scope = _scopeFactory.CreateScope();
@@ -216,32 +219,36 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
         var anchor = chips.FirstOrDefault(c => c.DeviceIdentifier == msg.AnchorDeviceId);
         if (tag is null || anchor is null)
         {
-            _logger.LogWarning("Unknown chip(s) tag={Tag} anchor={Anchor}; skipping persistence",
+            _logger.LogWarning("Unknown chip(s) tag={Tag} anchor={Anchor}; skipping",
                 msg.TagDeviceId, msg.AnchorDeviceId);
             return;
         }
 
-        db.Set<RawMeasurement>().Add(new RawMeasurement
+        // Persist the raw measurement (gated by the existing config flag).
+        if (_options.PersistToDatabase)
         {
-            SessionId     = msg.SessionId.Value,
-            TagChipId     = tag.Id,
-            AnchorChipId  = anchor.Id,
-            RecordedAt    = msg.RecordedAt.Value,
-            Distance      = msg.Distance,
-            Rssi          = msg.Rssi,
-            Snr           = msg.Snr,
-            Quality       = msg.Quality,
-        });
-        await db.SaveChangesAsync();
-    }
+            db.Set<RawMeasurement>().Add(new RawMeasurement
+            {
+                SessionId     = msg.SessionId.Value,
+                TagChipId     = tag.Id,
+                AnchorChipId  = anchor.Id,
+                RecordedAt    = msg.RecordedAt.Value,
+                Distance      = msg.Distance,
+                Rssi          = msg.Rssi,
+                Snr           = msg.Snr,
+                Quality       = msg.Quality,
+            });
+            await db.SaveChangesAsync();
+        }
 
-    private async Task<PositionResultMessage?> TryCalculatePositionAsync(RawMeasurementMessage msg)
-    {
-        throw new NotImplementedException("Trilateration logic not implemented yet.");
-        // collect distances from 3 anchors
-        // read anchor coordinates from SessionConfigChip
-        // run trilateration
-        // return PositionResultMessage
+        // Feed the positioning pipeline. It buffers, decides when to solve,
+        // persists the PositionResult, and broadcasts via SignalR.
+        await _pipeline.OnRawMeasurementAsync(
+            sessionId:  msg.SessionId.Value,
+            tagId:      tag.Id,
+            anchorId:   anchor.Id,
+            distance:   (double)msg.Distance.Value,
+            recordedAt: msg.RecordedAt.Value);
     }
 
     /// <summary>Very small MQTT topic-filter matcher (supports + and #).</summary>

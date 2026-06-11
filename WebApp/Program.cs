@@ -1,3 +1,4 @@
+using App.BLL.Positioning;
 using App.DAL.EF;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -37,6 +38,29 @@ builder.Services.AddSignalR();
 
 // MQTT settings bound from appsettings.json ("Mqtt" section).
 builder.Services.Configure<MqttOptions>(builder.Configuration.GetSection(MqttOptions.SectionName));
+
+// --- Positioning pipeline ---------------------------------------------------
+// Pure math; singleton.
+builder.Services.AddSingleton<ITrilaterationSolver, LeastSquaresTrilaterationSolver>();
+
+// Caches anchor coordinates per session; uses IServiceScopeFactory for DB access.
+builder.Services.AddSingleton<IAnchorPositionProvider, AnchorPositionProvider>();
+
+// Rolling in-memory cache of the latest distance per (session, tag, anchor).
+builder.Services.AddSingleton<IMeasurementBuffer, InMemoryMeasurementBuffer>();
+
+// SignalR sink for computed PositionResults.
+builder.Services.AddSingleton<IPositionResultPublisher, SignalRPositionResultPublisher>();
+
+// Pipeline options (could later be bound from configuration).
+builder.Services.AddSingleton(new PositioningPipelineOptions());
+
+// TimeProvider is registered by the framework, but make sure it's there.
+builder.Services.AddSingleton(TimeProvider.System);
+
+// The orchestrator itself.
+builder.Services.AddSingleton<IPositioningPipeline, PositioningPipeline>();
+// ---------------------------------------------------------------------------
 
 // Background service that subscribes to Mosquitto and re-broadcasts via SignalR.
 builder.Services.AddHostedService<MqttIngestService>();
