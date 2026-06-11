@@ -1,40 +1,37 @@
 @model IEnumerable<App.Domain.SessionConfigChip>
 
 @{
-    ViewData["Title"] = "Index";
+    ViewData["Title"] = "Layout chips";
 }
 
-<h1>Index</h1>
+<h1>Layout chips</h1>
 
 <p>
-    <a asp-action="Create">Create New</a>
+    <a asp-action="Create">Add chip to layout</a>
 </p>
 <table class="table">
     <thead>
         <tr>
             <th>
-                @Html.DisplayNameFor(model => model.Role)
+                Layout
             </th>
             <th>
-                @Html.DisplayNameFor(model => model.XCoord)
+                Chip
             </th>
             <th>
-                @Html.DisplayNameFor(model => model.YCoord)
+                Device ID
             </th>
             <th>
-                @Html.DisplayNameFor(model => model.ZCoord)
+                Role
             </th>
             <th>
-                @Html.DisplayNameFor(model => model.CreatedAt)
+                X
             </th>
             <th>
-                @Html.DisplayNameFor(model => model.UpdatedAt)
+                Y
             </th>
             <th>
-                @Html.DisplayNameFor(model => model.SessionConfig)
-            </th>
-            <th>
-                @Html.DisplayNameFor(model => model.Chip)
+                Z
             </th>
             <th></th>
         </tr>
@@ -42,6 +39,15 @@
     <tbody>
 @foreach (var item in Model) {
         <tr>
+            <td>
+                @Html.DisplayFor(modelItem => item.SessionConfig.Name)
+            </td>
+            <td>
+                @Html.DisplayFor(modelItem => item.Chip.Name)
+            </td>
+            <td>
+                @Html.DisplayFor(modelItem => item.Chip.DeviceIdentifier)
+            </td>
             <td>
                 @Html.DisplayFor(modelItem => item.Role)
             </td>
@@ -53,18 +59,6 @@
             </td>
             <td>
                 @Html.DisplayFor(modelItem => item.ZCoord)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.CreatedAt)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.UpdatedAt)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.SessionConfig.Name)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.Chip.DeviceIdentifier)
             </td>
             <td>
                 <a asp-action="Edit" asp-route-id="@item.Id">Edit</a> |

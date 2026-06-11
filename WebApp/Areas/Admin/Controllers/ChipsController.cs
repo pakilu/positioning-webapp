@@ -39,9 +39,12 @@ namespace WebApp.Areas.Admin.Controllers
         }
 
         // GET: Chips/Create
-        public IActionResult Create()
+        public IActionResult Create(string? deviceIdentifier)
         {
-            return View();
+            return View(new Chip
+            {
+                DeviceIdentifier = deviceIdentifier?.Trim() ?? string.Empty
+            });
         }
 
         // POST: Chips/Create
@@ -49,11 +52,14 @@ namespace WebApp.Areas.Admin.Controllers
         // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("Id,Name,DeviceIdentifier,Description,CreatedAt,UpdatedAt")] Chip chip)
+        public async Task<IActionResult> Create([Bind("Name,DeviceIdentifier,Description")] Chip chip)
         {
             if (ModelState.IsValid)
             {
                 chip.Id = Guid.NewGuid();
+                chip.DeviceIdentifier = chip.DeviceIdentifier.Trim();
+                chip.CreatedAt = DateTime.UtcNow;
+                chip.UpdatedAt = DateTime.UtcNow;
                 _context.Add(chip);
                 await _context.SaveChangesAsync();
                 return RedirectToAction(nameof(Index));
@@ -82,7 +88,7 @@ namespace WebApp.Areas.Admin.Controllers
         // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(Guid id, [Bind("Id,Name,DeviceIdentifier,Description,CreatedAt,UpdatedAt")] Chip chip)
+        public async Task<IActionResult> Edit(Guid id, [Bind("Id,Name,DeviceIdentifier,Description")] Chip chip)
         {
             if (id != chip.Id)
             {
@@ -93,7 +99,16 @@ namespace WebApp.Areas.Admin.Controllers
             {
                 try
                 {
-                    _context.Update(chip);
+                    var existing = await _context.Chips.FindAsync(id);
+                    if (existing == null)
+                    {
+                        return NotFound();
+                    }
+
+                    existing.Name = chip.Name;
+                    existing.DeviceIdentifier = chip.DeviceIdentifier.Trim();
+                    existing.Description = chip.Description;
+                    existing.UpdatedAt = DateTime.UtcNow;
                     await _context.SaveChangesAsync();
                 }
                 catch (DbUpdateConcurrencyException)

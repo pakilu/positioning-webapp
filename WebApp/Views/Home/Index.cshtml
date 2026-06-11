@@ -1,8 +1,25 @@
-﻿@{
-    ViewData["Title"] = "Home Page";
+@{
+    ViewData["Title"] = "Setup";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+<div>
+    <h1>Positioning setup</h1>
+
+    <div class="list-group col-md-7">
+        <a class="list-group-item list-group-item-action" asp-controller="Chips" asp-action="Index">
+            1. Register physical chips
+        </a>
+        <a class="list-group-item list-group-item-action" asp-controller="SessionConfigs" asp-action="Index">
+            2. Create or choose a room layout
+        </a>
+        <a class="list-group-item list-group-item-action" asp-controller="SessionConfigChips" asp-action="Index">
+            3. Assign each chip as an anchor or tag
+        </a>
+        <a class="list-group-item list-group-item-action" asp-controller="Sessions" asp-action="Index">
+            4. Start a session for that layout
+        </a>
+        <a class="list-group-item list-group-item-action" asp-controller="Home" asp-action="Live">
+            5. Watch live tag coordinates
+        </a>
+    </div>
 </div>

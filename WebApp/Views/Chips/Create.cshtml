@@ -1,12 +1,12 @@
 @model App.Domain.Chip
 
 @{
-    ViewData["Title"] = "Create";
+    ViewData["Title"] = "Register chip";
 }
 
-<h1>Create</h1>
+<h1>Register chip</h1>
 
-<h4>Chip</h4>
+<h4>Physical device</h4>
 <hr />
 <div class="row">
     <div class="col-md-4">
@@ -18,8 +18,8 @@
                 <span asp-validation-for="Name" class="text-danger"></span>
             </div>
             <div class="form-group">
-                <label asp-for="DeviceIdentifier" class="control-label"></label>
-                <input asp-for="DeviceIdentifier" class="form-control" />
+                <label asp-for="DeviceIdentifier" class="control-label">MAC address / device ID</label>
+                <input asp-for="DeviceIdentifier" class="form-control" autocomplete="off" placeholder="24:6F:28:AA:BB:01" />
                 <span asp-validation-for="DeviceIdentifier" class="text-danger"></span>
             </div>
             <div class="form-group">
@@ -28,26 +28,26 @@
                 <span asp-validation-for="Description" class="text-danger"></span>
             </div>
             <div class="form-group">
-                <label asp-for="CreatedAt" class="control-label"></label>
-                <input asp-for="CreatedAt" class="form-control" />
-                <span asp-validation-for="CreatedAt" class="text-danger"></span>
-            </div>
-            <div class="form-group">
-                <label asp-for="UpdatedAt" class="control-label"></label>
-                <input asp-for="UpdatedAt" class="form-control" />
-                <span asp-validation-for="UpdatedAt" class="text-danger"></span>
-            </div>
-            <div class="form-group">
-                <input type="submit" value="Create" class="btn btn-primary" />
+                <input type="submit" value="Register" class="btn btn-primary" />
             </div>
         </form>
     </div>
 </div>
 
 <div>
-    <a asp-action="Index">Back to List</a>
+    <a asp-action="Index">Back to chips</a>
 </div>
 
 @section Scripts {
     @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        const deviceInput = document.getElementById("DeviceIdentifier");
+        deviceInput?.addEventListener("blur", () => {
+            const cleaned = deviceInput.value.trim().replace(/[-\s]/g, ":").toUpperCase();
+            const compact = cleaned.replace(/:/g, "");
+            deviceInput.value = compact.length === 12
+                ? compact.match(/.{1,2}/g).join(":")
+                : cleaned;
+        });
+    </script>
 }

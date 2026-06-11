@@ -47,10 +47,14 @@
 
         window.addEventListener("positioning:position", e => {
             const m = e.detail;
+            const tag = m.tagDeviceId ?? m.tagId ?? "";
+            const x = m.xCoord ?? m.x ?? "";
+            const y = m.yCoord ?? m.y ?? "";
+            const z = m.zCoord ?? m.z ?? "";
             prepend(posBody, `<tr>
                 <td>${new Date(m.recordedAt).toLocaleTimeString()}</td>
-                <td>${m.tagDeviceId ?? ""}</td>
-                <td>${m.xCoord}</td><td>${m.yCoord}</td><td>${m.zCoord ?? ""}</td>
+                <td>${tag}</td>
+                <td>${x}</td><td>${y}</td><td>${z}</td>
                 <td>${m.accuracy ?? ""}</td></tr>`);
         });
 

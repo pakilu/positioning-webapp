@@ -2,66 +2,75 @@
 @model App.Domain.SessionConfigChip
 
 @{
-    ViewData["Title"] = "Create";
+    ViewData["Title"] = "Add chip to layout";
 }
 
-<h1>Create</h1>
+<h1>Add chip to layout</h1>
 
-<h4>SessionConfigChip</h4>
+<h4>Role and coordinates</h4>
 <hr />
 <div class="row">
     <div class="col-md-4">
         <form asp-action="Create">
             <div asp-validation-summary="ModelOnly" class="text-danger"></div>
             <div class="form-group">
-                <label asp-for="SessionConfigId" class="control-label"></label>
+                <label asp-for="SessionConfigId" class="control-label">Room layout</label>
                 <select asp-for="SessionConfigId" class ="form-control" asp-items="ViewBag.SessionConfigId"></select>
             </div>
             <div class="form-group">
-                <label asp-for="ChipId" class="control-label"></label>
+                <label asp-for="ChipId" class="control-label">Chip</label>
                 <select asp-for="ChipId" class ="form-control" asp-items="ViewBag.ChipId"></select>
             </div>
             <div class="form-group">
-                <label asp-for="Role" class="control-label"></label>
+                <label asp-for="Role" class="control-label">Use as</label>
                 <select asp-for="Role" class="form-control" asp-items="Html.GetEnumSelectList<EChipRole>()"></select>
                 <span asp-validation-for="Role" class="text-danger"></span>
             </div>
-            <div class="form-group">
+            <div class="form-group anchor-coordinate">
                 <label asp-for="XCoord" class="control-label"></label>
                 <input asp-for="XCoord" class="form-control" />
                 <span asp-validation-for="XCoord" class="text-danger"></span>
             </div>
-            <div class="form-group">
+            <div class="form-group anchor-coordinate">
                 <label asp-for="YCoord" class="control-label"></label>
                 <input asp-for="YCoord" class="form-control" />
                 <span asp-validation-for="YCoord" class="text-danger"></span>
             </div>
-            <div class="form-group">
+            <div class="form-group anchor-coordinate">
                 <label asp-for="ZCoord" class="control-label"></label>
                 <input asp-for="ZCoord" class="form-control" />
                 <span asp-validation-for="ZCoord" class="text-danger"></span>
             </div>
             <div class="form-group">
-                <label asp-for="CreatedAt" class="control-label"></label>
-                <input asp-for="CreatedAt" class="form-control" />
-                <span asp-validation-for="CreatedAt" class="text-danger"></span>
-            </div>
-            <div class="form-group">
-                <label asp-for="UpdatedAt" class="control-label"></label>
-                <input asp-for="UpdatedAt" class="form-control" />
-                <span asp-validation-for="UpdatedAt" class="text-danger"></span>
-            </div>
-            <div class="form-group">
-                <input type="submit" value="Create" class="btn btn-primary" />
+                <input type="submit" value="Add to layout" class="btn btn-primary" />
             </div>
         </form>
     </div>
 </div>
 
 <div>
-    <a asp-action="Index">Back to List</a>
+    <a asp-action="Index">Back to layout chips</a>
 </div>
 
 @section Scripts {
     @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        const roleSelect = document.getElementById("Role");
+        const coordinateRows = document.querySelectorAll(".anchor-coordinate");
+        const coordinateInputs = document.querySelectorAll(".anchor-coordinate input");
+
+        function updateCoordinateInputs() {
+            const selectedText = roleSelect.options[roleSelect.selectedIndex]?.text || "";
+            const isAnchor = selectedText.toLowerCase() === "anchor";
+
+            coordinateRows.forEach(row => row.style.display = isAnchor ? "" : "none");
+            coordinateInputs.forEach(input => {
+                input.disabled = !isAnchor;
+                if (!isAnchor) input.value = "";
+            });
+        }
+
+        roleSelect?.addEventListener("change", updateCoordinateInputs);
+        updateCoordinateInputs();
+    </script>
 }
