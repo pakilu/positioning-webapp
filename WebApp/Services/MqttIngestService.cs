@@ -194,6 +194,12 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
                 .SendAsync("RawMeasurement", msg);
         }
 
+        var position = await TryCalculatePositionAsync(msg);
+        if (position is not null)
+        {
+            await HandlePositionAsync(position);
+        }
+
         if (!_options.PersistToDatabase || msg.SessionId is null
             || string.IsNullOrEmpty(msg.TagDeviceId) || string.IsNullOrEmpty(msg.AnchorDeviceId))
             return;
@@ -227,6 +233,15 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
             Quality       = msg.Quality,
         });
         await db.SaveChangesAsync();
+    }
+
+    private async Task<PositionResultMessage?> TryCalculatePositionAsync(RawMeasurementMessage msg)
+    {
+        throw new NotImplementedException("Trilateration logic not implemented yet.");
+        // collect distances from 3 anchors
+        // read anchor coordinates from SessionConfigChip
+        // run trilateration
+        // return PositionResultMessage
     }
 
     /// <summary>Very small MQTT topic-filter matcher (supports + and #).</summary>
