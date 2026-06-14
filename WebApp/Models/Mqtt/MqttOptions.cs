@@ -34,6 +34,13 @@ public class MqttOptions
     /// </summary>
     public string PositionResultTopic { get; set; } = "uwb/+/position";
 
+    /// <summary>
+    /// Topic chips publish their MAC address to on boot so the server can
+    /// auto-register them. Payload is the MAC as a plain UTF-8 string
+    /// (JSON <c>{"mac":"..."}</c> is also accepted).
+    /// </summary>
+    public string ChipRegistrationTopic { get; set; } = "uwb/chips/registration";
+
     /// <summary>If true, incoming messages are also persisted to the database.</summary>
     public bool PersistToDatabase { get; set; } = true;
 }
