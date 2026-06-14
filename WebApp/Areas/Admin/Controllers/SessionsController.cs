@@ -83,6 +83,8 @@ namespace WebApp.Areas.Admin.Controllers
 
             var session = await _context.Sessions
                 .Include(s => s.SessionConfig)
+                    .ThenInclude(sc => sc.SessionConfigChips)
+                        .ThenInclude(scc => scc.Chip)
                 .FirstOrDefaultAsync(m => m.Id == id);
             if (session == null)
             {

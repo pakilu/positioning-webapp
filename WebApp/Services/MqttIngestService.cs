@@ -224,27 +224,37 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
     {
         msg.RecordedAt ??= DateTime.UtcNow;
 
-        // Always broadcast the raw stream to listeners.
-        await _hub.Clients.All.SendAsync("RawMeasurement", msg);
-        if (msg.SessionId is Guid sid)
-        {
-            await _hub.Clients.Group(PositioningHub.GroupName(sid))
-                .SendAsync("RawMeasurement", msg);
-        }
-
         // Need a session, both device identifiers, and a distance to do
         // anything further (chip resolution, persistence, trilateration).
-        if (msg.SessionId is null
-            || string.IsNullOrEmpty(msg.TagDeviceId)
+        if (string.IsNullOrEmpty(msg.TagDeviceId)
             || string.IsNullOrEmpty(msg.AnchorDeviceId)
             || msg.Distance is null)
+        {
+            await BroadcastRawAsync(msg);
             return;
+        }
 
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         var tag    = await GetOrCreateChipAsync(db, msg.TagDeviceId);
         var anchor = await GetOrCreateChipAsync(db, msg.AnchorDeviceId);
+
+        if (msg.SessionId is null)
+        {
+            msg.SessionId = await TryResolveActiveSessionAsync(db, tag.Id, anchor.Id);
+        }
+
+        await BroadcastRawAsync(msg);
+
+        if (msg.SessionId is null)
+        {
+            _logger.LogDebug(
+                "Raw measurement from tag {TagDeviceId} and anchor {AnchorDeviceId} has no active matching session; skipping solve.",
+                msg.TagDeviceId,
+                msg.AnchorDeviceId);
+            return;
+        }
 
         // Persist the raw measurement (gated by the existing config flag).
         if (_options.PersistToDatabase)
@@ -271,6 +281,32 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
             anchorId:   anchor.Id,
             distance:   (double)msg.Distance.Value,
             recordedAt: msg.RecordedAt.Value);
+    }
+
+    private async Task BroadcastRawAsync(RawMeasurementMessage msg)
+    {
+        await _hub.Clients.All.SendAsync("RawMeasurement", msg);
+        if (msg.SessionId is Guid sid)
+        {
+            await _hub.Clients.Group(PositioningHub.GroupName(sid))
+                .SendAsync("RawMeasurement", msg);
+        }
+    }
+
+    private static async Task<Guid?> TryResolveActiveSessionAsync(AppDbContext db, Guid tagId, Guid anchorId)
+    {
+        var matches = await db.Sessions
+            .Where(s => s.Status == ESessionStatus.Active)
+            .Where(s => s.SessionConfig.SessionConfigChips.Any(c =>
+                c.ChipId == tagId && c.Role == EChipRole.Tag))
+            .Where(s => s.SessionConfig.SessionConfigChips.Any(c =>
+                c.ChipId == anchorId && c.Role == EChipRole.Anchor))
+            .OrderByDescending(s => s.StartedAt ?? s.CreatedAt)
+            .Select(s => s.Id)
+            .Take(2)
+            .ToListAsync();
+
+        return matches.Count == 1 ? matches[0] : null;
     }
 
     /// <summary>Very small MQTT topic-filter matcher (supports + and #).</summary>

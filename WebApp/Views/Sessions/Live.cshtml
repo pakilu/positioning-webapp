@@ -1,7 +1,28 @@
 @model App.Domain.Session
+@using System.Text.Json
 
 @{
     ViewData["Title"] = $"Live - {Model.Name}";
+    var anchors = Model.SessionConfig?.SessionConfigChips
+        .Where(c => c.Role == App.Domain.EChipRole.Anchor && c.XCoord != null && c.YCoord != null)
+        .Select(c => new
+        {
+            chipId = c.ChipId,
+            name = c.Chip?.Name ?? c.Chip?.DeviceIdentifier ?? c.ChipId.ToString(),
+            x = c.XCoord,
+            y = c.YCoord,
+            z = c.ZCoord ?? 0
+        })
+        .ToList() ?? [];
+
+    var tags = Model.SessionConfig?.SessionConfigChips
+        .Where(c => c.Role == App.Domain.EChipRole.Tag)
+        .Select(c => new
+        {
+            chipId = c.ChipId,
+            name = c.Chip?.Name ?? c.Chip?.DeviceIdentifier ?? c.ChipId.ToString()
+        })
+        .ToList() ?? [];
 }
 
 <h1>Live session: @Model.Name</h1>
@@ -19,20 +40,44 @@
     <a asp-action="Details" asp-route-id="@Model.Id" class="btn btn-outline-secondary btn-sm">Session details</a>
 </div>
 
-<h4>Trilateration results</h4>
-<table class="table table-sm">
-    <thead>
-        <tr>
-            <th>Time</th>
-            <th>Tag</th>
-            <th>X</th>
-            <th>Y</th>
-            <th>Z</th>
-            <th>Accuracy</th>
-        </tr>
-    </thead>
-    <tbody id="positions"></tbody>
-</table>
+<div class="live-grid">
+    <section class="live-stage" aria-label="Live positioning map">
+        <div class="live-stage-header">
+            <div>
+                <h4>Position</h4>
+                <p id="latest-fix">Waiting for a position fix</p>
+            </div>
+            <div class="live-stat">
+                <span id="anchor-count">@anchors.Count</span>
+                <small>anchors</small>
+            </div>
+        </div>
+        <div id="position-plane" class="position-plane">
+            <div class="axis-label axis-x">X</div>
+            <div class="axis-label axis-y">Y</div>
+            <div id="tag-marker" class="tag-marker" hidden>
+                <span></span>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h4>Trilateration results</h4>
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Tag</th>
+                    <th>X</th>
+                    <th>Y</th>
+                    <th>Z</th>
+                    <th>Accuracy</th>
+                </tr>
+            </thead>
+            <tbody id="positions"></tbody>
+        </table>
+    </section>
+</div>
 
 @section Scripts {
     <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
@@ -40,8 +85,26 @@
     <script>
         const SESSION_ID = "@Model.Id";
         const MAX_ROWS = 50;
+        const ANCHORS = @Html.Raw(JsonSerializer.Serialize(anchors));
+        const TAGS = @Html.Raw(JsonSerializer.Serialize(tags));
         const statusEl = document.getElementById("conn-status");
         const posBody  = document.getElementById("positions");
+        const plane = document.getElementById("position-plane");
+        const marker = document.getElementById("tag-marker");
+        const latestFix = document.getElementById("latest-fix");
+        const tagNames = new Map(TAGS.map(t => [String(t.chipId).toLowerCase(), t.name]));
+
+        const bounds = (() => {
+            const xs = ANCHORS.map(a => Number(a.x));
+            const ys = ANCHORS.map(a => Number(a.y));
+            let minX = Math.min(...xs, 0);
+            let maxX = Math.max(...xs, 10);
+            let minY = Math.min(...ys, 0);
+            let maxY = Math.max(...ys, 10);
+            const padX = Math.max((maxX - minX) * 0.12, 0.5);
+            const padY = Math.max((maxY - minY) * 0.12, 0.5);
+            return { minX: minX - padX, maxX: maxX + padX, minY: minY - padY, maxY: maxY + padY };
+        })();
 
         async function joinThisSession() {
             try {
@@ -73,6 +136,47 @@
             return (typeof n === "number") ? n.toFixed(3) : (n ?? "");
         }
 
+        function tagLabel(tagId) {
+            if (!tagId) return "";
+            const key = String(tagId).toLowerCase();
+            return tagNames.get(key) ?? String(tagId).slice(0, 8);
+        }
+
+        function toPercent(x, y) {
+            const left = ((x - bounds.minX) / (bounds.maxX - bounds.minX)) * 100;
+            const top = 100 - ((y - bounds.minY) / (bounds.maxY - bounds.minY)) * 100;
+            return {
+                left: Math.max(0, Math.min(100, left)),
+                top: Math.max(0, Math.min(100, top))
+            };
+        }
+
+        function placeAnchor(anchor) {
+            const p = toPercent(Number(anchor.x), Number(anchor.y));
+            const el = document.createElement("div");
+            el.className = "anchor-marker";
+            el.style.left = `${p.left}%`;
+            el.style.top = `${p.top}%`;
+            el.title = `${anchor.name} (${fmt(Number(anchor.x))}, ${fmt(Number(anchor.y))})`;
+            el.innerHTML = `<span></span><strong>${anchor.name}</strong>`;
+            plane.appendChild(el);
+        }
+
+        function updateMarker(m) {
+            const x = Number(m.x);
+            const y = Number(m.y);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+
+            const p = toPercent(x, y);
+            marker.hidden = false;
+            marker.style.left = `${p.left}%`;
+            marker.style.top = `${p.top}%`;
+            marker.querySelector("span").textContent = tagLabel(m.tagId);
+            latestFix.textContent = `Tag ${tagLabel(m.tagId)} at X ${fmt(x)}, Y ${fmt(y)}, Z ${fmt(Number(m.z))}`;
+        }
+
+        ANCHORS.forEach(placeAnchor);
+
         window.addEventListener("positioning:position", e => {
             const m = e.detail; // PositionResultBroadcast
 
@@ -82,13 +186,156 @@
                 return;
             }
 
+            updateMarker(m);
             prepend(posBody, `<tr>
                 <td>${new Date(m.recordedAt).toLocaleTimeString()}</td>
-                <td>${m.tagId ?? ""}</td>
+                <td>${tagLabel(m.tagId)}</td>
                 <td>${fmt(m.x)}</td>
                 <td>${fmt(m.y)}</td>
                 <td>${fmt(m.z)}</td>
                 <td>${fmt(m.accuracy)}</td></tr>`);
         });
     </script>
+}
+
+@section Styles {
+    <style>
+        .live-grid {
+            display: grid;
+            gap: 1rem;
+            grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+            align-items: start;
+        }
+
+        .live-stage-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            align-items: start;
+            margin-bottom: .75rem;
+        }
+
+        .live-stage-header h4 {
+            margin-bottom: .15rem;
+        }
+
+        .live-stage-header p {
+            margin: 0;
+            color: #5c6670;
+        }
+
+        .live-stat {
+            min-width: 5rem;
+            text-align: right;
+        }
+
+        .live-stat span {
+            display: block;
+            font-size: 1.4rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .live-stat small {
+            color: #5c6670;
+        }
+
+        .position-plane {
+            position: relative;
+            min-height: 520px;
+            overflow: hidden;
+            border: 1px solid #cfd6dd;
+            border-radius: 8px;
+            background:
+                linear-gradient(#eef2f5 1px, transparent 1px),
+                linear-gradient(90deg, #eef2f5 1px, transparent 1px),
+                #fbfcfd;
+            background-size: 40px 40px;
+        }
+
+        .axis-label {
+            position: absolute;
+            color: #66717c;
+            font-size: .8rem;
+            font-weight: 700;
+            pointer-events: none;
+        }
+
+        .axis-x {
+            right: .75rem;
+            bottom: .5rem;
+        }
+
+        .axis-y {
+            left: .65rem;
+            top: .55rem;
+        }
+
+        .anchor-marker,
+        .tag-marker {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+        }
+
+        .anchor-marker span {
+            display: block;
+            width: 16px;
+            height: 16px;
+            border: 3px solid #245c8a;
+            border-radius: 50%;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(36, 92, 138, .12);
+        }
+
+        .anchor-marker strong {
+            display: block;
+            margin-top: .25rem;
+            max-width: 8rem;
+            color: #245c8a;
+            font-size: .75rem;
+            font-weight: 700;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .tag-marker {
+            z-index: 3;
+            transition: left .18s ease, top .18s ease;
+        }
+
+        .tag-marker::before {
+            content: "";
+            position: absolute;
+            inset: -13px;
+            border: 2px solid rgba(36, 133, 74, .28);
+            border-radius: 50%;
+        }
+
+        .tag-marker span {
+            display: grid;
+            min-width: 3.75rem;
+            min-height: 3.75rem;
+            padding: .35rem;
+            place-items: center;
+            border: 3px solid white;
+            border-radius: 50%;
+            background: #24854a;
+            color: white;
+            box-shadow: 0 8px 24px rgba(20, 67, 42, .25);
+            font-size: .78rem;
+            font-weight: 700;
+        }
+
+        @@media (max-width: 900px) {
+            .live-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .position-plane {
+                min-height: 420px;
+            }
+        }
+    </style>
 }
