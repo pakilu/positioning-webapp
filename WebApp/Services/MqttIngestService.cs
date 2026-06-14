@@ -89,15 +89,14 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
         await _client.SubscribeAsync(new[]
         {
             new MqttTopicFilterBuilder().WithTopic(_options.RawMeasurementTopic).Build(),
-            new MqttTopicFilterBuilder().WithTopic(_options.PositionResultTopic).Build(),
             new MqttTopicFilterBuilder().WithTopic(_options.ChipRegistrationTopic).Build(),
         });
 
         await _client.StartAsync(managedOptions);
 
         _logger.LogInformation(
-            "MQTT ingest service started. Subscribed to '{RawTopic}', '{PosTopic}' and '{RegTopic}'.",
-            _options.RawMeasurementTopic, _options.PositionResultTopic, _options.ChipRegistrationTopic);
+            "MQTT ingest service started. Subscribed to '{RawTopic}' and '{RegTopic}'.",
+            _options.RawMeasurementTopic, _options.ChipRegistrationTopic);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
@@ -122,11 +121,6 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
             if (TopicMatches(topic, _options.ChipRegistrationTopic))
             {
                 await HandleRegistrationAsync(payload);
-            }
-            else if (TopicMatches(topic, _options.PositionResultTopic))
-            {
-                var msg = JsonSerializer.Deserialize<PositionResultMessage>(payload, JsonOpts);
-                if (msg is not null) await HandlePositionAsync(msg);
             }
             else if (TopicMatches(topic, _options.RawMeasurementTopic))
             {
@@ -224,42 +218,6 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
             chip = await db.Chips.FirstAsync(c => c.DeviceIdentifier == deviceId);
         }
         return chip;
-    }
-
-    private async Task HandlePositionAsync(PositionResultMessage msg)
-    {
-        msg.RecordedAt ??= DateTime.UtcNow;
-
-        // 1) Broadcast to all clients
-        await _hub.Clients.All.SendAsync("PositionResult", msg);
-
-        // 2) Broadcast to per-session group (if a session is provided)
-        if (msg.SessionId is Guid sid)
-        {
-            await _hub.Clients.Group(PositioningHub.GroupName(sid))
-                .SendAsync("PositionResult", msg);
-        }
-
-        // 3) Optional DB persistence
-        if (!_options.PersistToDatabase || msg.SessionId is null || string.IsNullOrEmpty(msg.TagDeviceId))
-            return;
-
-        using var scope = _scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        var tag = await GetOrCreateChipAsync(db, msg.TagDeviceId);
-
-        db.Set<PositionResult>().Add(new PositionResult
-        {
-            SessionId  = msg.SessionId.Value,
-            TagChipId  = tag.Id,
-            RecordedAt = msg.RecordedAt.Value,
-            XCoord     = msg.XCoord,
-            YCoord     = msg.YCoord,
-            ZCoord     = msg.ZCoord,
-            Accuracy   = msg.Accuracy,
-        });
-        await db.SaveChangesAsync();
     }
 
     private async Task HandleRawAsync(RawMeasurementMessage msg)

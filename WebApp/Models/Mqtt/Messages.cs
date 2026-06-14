@@ -15,17 +15,3 @@ public class RawMeasurementMessage
     public decimal? Snr { get; set; }
     public decimal? Quality { get; set; }
 }
-
-/// <summary>
-/// JSON payload expected on the position-result MQTT topic.
-/// </summary>
-public class PositionResultMessage
-{
-    public Guid? SessionId { get; set; }
-    public string? TagDeviceId { get; set; }
-    public DateTime? RecordedAt { get; set; }
-    public decimal XCoord { get; set; }
-    public decimal YCoord { get; set; }
-    public decimal? ZCoord { get; set; }
-    public decimal? Accuracy { get; set; }
-}

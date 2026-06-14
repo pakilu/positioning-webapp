@@ -29,12 +29,6 @@ public class MqttOptions
     public string RawMeasurementTopic { get; set; } = "uwb/+/measurement";
 
     /// <summary>
-    /// Topic for computed position results.
-    /// Payload must be JSON matching <see cref="PositionResultMessage"/>.
-    /// </summary>
-    public string PositionResultTopic { get; set; } = "uwb/+/position";
-
-    /// <summary>
     /// Topic chips publish their MAC address to on boot so the server can
     /// auto-register them. Payload is the MAC as a plain UTF-8 string
     /// (JSON <c>{"mac":"..."}</c> is also accepted).

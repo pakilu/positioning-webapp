@@ -6,7 +6,7 @@ namespace WebApp.Hubs;
 /// SignalR hub used as the WebSocket endpoint for live positioning data.
 /// Clients connect to <c>/hubs/positioning</c> and receive:
 ///   - "RawMeasurement"  -> RawMeasurementMessage
-///   - "PositionResult"  -> PositionResultMessage
+///   - "PositionResult"  -> PositionResultBroadcast (computed by the positioning pipeline)
 ///
 /// The server pushes; clients only need to listen. Optionally clients may
 /// join a per-session group via <see cref="JoinSession"/> so they only
