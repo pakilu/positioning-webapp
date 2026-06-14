@@ -69,25 +69,26 @@
             while (tbody.rows.length > MAX_ROWS) tbody.deleteRow(tbody.rows.length - 1);
         }
 
+        function fmt(n) {
+            return (typeof n === "number") ? n.toFixed(3) : (n ?? "");
+        }
+
         window.addEventListener("positioning:position", e => {
-            const m = e.detail;
-            // Filter: only show results for this session. The server also
-            // broadcasts to the per-session group, but the all-clients
-            // broadcast would otherwise leak other sessions in.
-            const msgSession = m.sessionId ?? m.SessionId;
-            if (msgSession && msgSession.toString().toLowerCase() !== SESSION_ID.toLowerCase()) {
+            const m = e.detail; // PositionResultBroadcast
+
+            // The server broadcasts to Clients.All as well as the per-session
+            // group, so filter to just this session.
+            if (m.sessionId && m.sessionId.toString().toLowerCase() !== SESSION_ID.toLowerCase()) {
                 return;
             }
 
-            const tag = m.tagDeviceId ?? m.tagId ?? "";
-            const x = m.xCoord ?? m.x ?? "";
-            const y = m.yCoord ?? m.y ?? "";
-            const z = m.zCoord ?? m.z ?? "";
             prepend(posBody, `<tr>
                 <td>${new Date(m.recordedAt).toLocaleTimeString()}</td>
-                <td>${tag}</td>
-                <td>${x}</td><td>${y}</td><td>${z}</td>
-                <td>${m.accuracy ?? ""}</td></tr>`);
+                <td>${m.tagId ?? ""}</td>
+                <td>${fmt(m.x)}</td>
+                <td>${fmt(m.y)}</td>
+                <td>${fmt(m.z)}</td>
+                <td>${fmt(m.accuracy)}</td></tr>`);
         });
     </script>
 }

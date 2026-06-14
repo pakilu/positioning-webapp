@@ -1,3 +1,33 @@
+/* ---------------------------------------------------------------
+   Soft rose / blush theme
+   Overrides Bootstrap defaults with a gentle pink-red palette.
+   Loaded after bootstrap.min.css so these rules win.
+--------------------------------------------------------------- */
+
+:root {
+  --rose-50:  #fff5f7;
+  --rose-100: #ffe8ee;
+  --rose-200: #fcd0db;
+  --rose-300: #f5a8bc;
+  --rose-400: #e87897;
+  --rose-500: #d94d75;  /* primary accent */
+  --rose-600: #b8385d;  /* hover / active */
+  --rose-700: #8f2748;
+  --rose-ink: #4a1f2b;  /* deep wine for text */
+  --rose-muted: #8a6470;
+
+  /* Remap Bootstrap CSS variables */
+  --bs-primary: var(--rose-500);
+  --bs-primary-rgb: 217, 77, 117;
+  --bs-link-color: var(--rose-600);
+  --bs-link-hover-color: var(--rose-700);
+  --bs-link-color-rgb: 184, 56, 93;
+  --bs-link-hover-color-rgb: 143, 39, 72;
+  --bs-body-color: var(--rose-ink);
+  --bs-body-bg: var(--rose-50);
+  --bs-border-color: #f1d6de;
+}
+
 html {
   font-size: 14px;
 }
@@ -8,10 +38,6 @@ html {
   }
 }
 
-.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
-}
-
 html {
   position: relative;
   min-height: 100%;
@@ -19,13 +45,206 @@ html {
 
 body {
   margin-bottom: 60px;
+  background-color: var(--rose-50);
+  color: var(--rose-ink);
+  font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
 }
 
-.form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
+/* Headings get a softer wine tone */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--rose-700);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+/* Links */
+a {
+  color: var(--rose-600);
+  text-decoration: none;
+}
+a:hover, a:focus {
+  color: var(--rose-700);
+  text-decoration: underline;
+}
+
+/* Focus ring -- no more bootstrap blue */
+.btn:focus, .btn:active:focus,
+.btn-link.nav-link:focus,
+.form-control:focus,
+.form-check-input:focus,
+.form-select:focus {
+  box-shadow: 0 0 0 0.1rem #fff, 0 0 0 0.25rem rgba(217, 77, 117, 0.45);
+  border-color: var(--rose-400);
+  outline: none;
+}
+
+/* ---------- Navbar ---------- */
+.navbar.bg-white,
+.navbar-light {
+  background-color: #fff0f4 !important;
+  border-bottom: 1px solid var(--rose-200) !important;
+  box-shadow: 0 2px 10px rgba(217, 77, 117, 0.06);
+}
+.navbar-brand {
+  color: var(--rose-700) !important;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.navbar-light .navbar-nav .nav-link,
+.navbar .nav-link.text-dark {
+  color: var(--rose-ink) !important;
+  transition: color .15s ease, background-color .15s ease;
+  border-radius: 6px;
+  padding-left: .65rem;
+  padding-right: .65rem;
+}
+.navbar-light .navbar-nav .nav-link:hover,
+.navbar .nav-link.text-dark:hover {
+  color: var(--rose-600) !important;
+  background-color: rgba(217, 77, 117, 0.08);
+}
+
+/* ---------- Buttons ---------- */
+.btn-primary {
+  background-color: var(--rose-500);
+  border-color: var(--rose-500);
+  color: #fff;
+}
+.btn-primary:hover,
+.btn-primary:focus {
+  background-color: var(--rose-600);
+  border-color: var(--rose-600);
+  color: #fff;
+}
+.btn-primary:active,
+.btn-primary.active {
+  background-color: var(--rose-700) !important;
+  border-color: var(--rose-700) !important;
+}
+
+.btn-secondary {
+  background-color: #c9a3ae;
+  border-color: #c9a3ae;
+  color: #fff;
+}
+.btn-secondary:hover {
+  background-color: #b78c98;
+  border-color: #b78c98;
+}
+
+.btn-outline-primary {
+  color: var(--rose-600);
+  border-color: var(--rose-400);
+}
+.btn-outline-primary:hover {
+  background-color: var(--rose-500);
+  border-color: var(--rose-500);
+  color: #fff;
+}
+
+/* ---------- Cards / panels / list groups ---------- */
+.card {
+  background-color: #fff;
+  border: 1px solid var(--rose-200);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(217, 77, 117, 0.06);
+}
+
+.list-group {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(217, 77, 117, 0.06);
+}
+.list-group-item {
+  background-color: #fff;
+  border-color: var(--rose-200);
+  color: var(--rose-ink);
+}
+.list-group-item-action:hover,
+.list-group-item-action:focus {
+  background-color: var(--rose-100);
+  color: var(--rose-700);
+}
+.list-group-item.active,
+.list-group-item-action.active {
+  background-color: var(--rose-500);
+  border-color: var(--rose-500);
+  color: #fff;
+}
+
+/* ---------- Tables ---------- */
+.table {
+  --bs-table-color: var(--rose-ink);
+  --bs-table-border-color: var(--rose-200);
+  --bs-table-striped-bg: #fff5f7;
+  --bs-table-hover-bg: #ffe8ee;
+  background-color: transparent;
+}
+.table > thead {
+  background-color: #fff0f4;
+}
+.table > thead th {
+  color: var(--rose-700);
+  border-bottom: 2px solid var(--rose-200);
+  font-weight: 600;
+}
+
+/* ---------- Forms ---------- */
+.form-control,
+.form-select {
+  background-color: #fff;
+  border: 1px solid var(--rose-200);
+  color: var(--rose-ink);
+  border-radius: 8px;
+}
+.form-control::placeholder { color: #c79aa6; }
+.form-label { color: var(--rose-700); font-weight: 500; }
+
+.form-floating > .form-control-plaintext::placeholder,
+.form-floating > .form-control::placeholder {
   color: var(--bs-secondary-color);
   text-align: end;
 }
-
-.form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
+.form-floating > .form-control-plaintext:focus::placeholder,
+.form-floating > .form-control:focus::placeholder {
   text-align: start;
+}
+
+/* ---------- Badges ---------- */
+.badge.bg-primary {
+  background-color: var(--rose-500) !important;
+}
+.badge.bg-secondary {
+  background-color: #c9a3ae !important;
+}
+.badge.bg-info {
+  background-color: var(--rose-400) !important;
+  color: #fff;
+}
+.badge.bg-success { background-color: #b58fa2 !important; }
+
+/* ---------- Text utility overrides (no blue) ---------- */
+.text-primary { color: var(--rose-600) !important; }
+.text-info    { color: var(--rose-500) !important; }
+.bg-primary   { background-color: var(--rose-500) !important; }
+.bg-info      { background-color: var(--rose-400) !important; }
+
+/* ---------- Footer ---------- */
+.footer {
+  color: var(--rose-muted) !important;
+  background-color: #fff0f4;
+  border-top: 1px solid var(--rose-200);
+}
+
+/* ---------- Alerts (gentle pink tints) ---------- */
+.alert-primary,
+.alert-info {
+  background-color: var(--rose-100);
+  border-color: var(--rose-200);
+  color: var(--rose-700);
+}
+
+/* ---------- Validation ---------- */
+.text-danger, .field-validation-error, .validation-summary-errors {
+  color: #b8385d !important;
 }

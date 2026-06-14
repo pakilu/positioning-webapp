@@ -1,5 +1,5 @@
-﻿/* Please see documentation at https://learn.microsoft.com/aspnet/core/client-side/bundling-and-minification
-for details on configuring this project to bundle and minify static web assets. */
+﻿/* Scoped layout styles — soft rose theme.
+   Color palette intentionally avoids any blue tones. */
 
 a.navbar-brand {
   white-space: normal;
@@ -8,30 +8,43 @@ a.navbar-brand {
 }
 
 a {
-  color: #0077cc;
+  color: #b8385d; /* rose-600 */
+}
+
+a:hover {
+  color: #8f2748; /* rose-700 */
 }
 
 .btn-primary {
   color: #fff;
-  background-color: #1b6ec2;
-  border-color: #1861ac;
+  background-color: #d94d75; /* rose-500 */
+  border-color: #d94d75;
 }
 
-.nav-pills .nav-link.active, .nav-pills .show > .nav-link {
+.btn-primary:hover,
+.btn-primary:focus {
   color: #fff;
-  background-color: #1b6ec2;
-  border-color: #1861ac;
+  background-color: #b8385d;
+  border-color: #b8385d;
+}
+
+.nav-pills .nav-link.active,
+.nav-pills .show > .nav-link {
+  color: #fff;
+  background-color: #d94d75;
+  border-color: #b8385d;
 }
 
 .border-top {
-  border-top: 1px solid #e5e5e5;
+  border-top: 1px solid #f1d6de;
 }
+
 .border-bottom {
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid #f1d6de;
 }
 
 .box-shadow {
-  box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .05);
+  box-shadow: 0 .25rem .75rem rgba(217, 77, 117, .08);
 }
 
 button.accept-policy {
