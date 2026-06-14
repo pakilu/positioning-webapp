@@ -151,7 +151,7 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
     /// <summary>
     /// Handles chip-registration announcements. Accepts either a plain MAC
     /// string payload (e.g. <c>"AA:BB:CC:11:22:33"</c>) or a small JSON
-    /// object <c>{"mac":"..."}</c>. If the MAC isn't already known, a new
+    /// object with a MAC field, such as <c>{"macAddress":"..."}</c>. If the MAC isn't already known, a new
     /// <see cref="Chip"/> row is inserted with the MAC as both
     /// DeviceIdentifier and Name. The operator can rename it later.
     /// </summary>
@@ -174,16 +174,19 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
         if (string.IsNullOrWhiteSpace(payload)) return null;
         var trimmed = payload.Trim();
 
-        // JSON form: { "mac": "..." }
+        // JSON form: { "macAddress": "..." } or legacy { "mac": "..." }
         if (trimmed.StartsWith("{"))
         {
             try
             {
                 using var doc = JsonDocument.Parse(trimmed);
-                if (doc.RootElement.TryGetProperty("mac", out var macProp) &&
-                    macProp.ValueKind == JsonValueKind.String)
+                foreach (var propertyName in new[] { "macAddress", "mac" })
                 {
-                    return macProp.GetString()?.Trim();
+                    if (doc.RootElement.TryGetProperty(propertyName, out var macProp) &&
+                        macProp.ValueKind == JsonValueKind.String)
+                    {
+                        return macProp.GetString()?.Trim();
+                    }
                 }
             }
             catch (JsonException) { /* fall through */ }
