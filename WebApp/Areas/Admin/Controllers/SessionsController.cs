@@ -53,17 +53,42 @@ namespace WebApp.Areas.Admin.Controllers
         // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("Id,SessionConfigId,Name,Status,StartedAt,EndedAt,CreatedAt,UpdatedAt")] Session session)
+        public async Task<IActionResult> Create([Bind("SessionConfigId,Name")] Session session)
         {
             ModelState.Remove(nameof(Session.SessionConfig));
             if (ModelState.IsValid)
             {
+                var now = DateTime.UtcNow;
                 session.Id = Guid.NewGuid();
+                session.Status = ESessionStatus.Active;
+                session.StartedAt = now;
+                session.EndedAt = null;
+                session.CreatedAt = now;
+                session.UpdatedAt = now;
                 _context.Add(session);
                 await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Index));
+                return RedirectToAction(nameof(Live), new { id = session.Id });
             }
             ViewData["SessionConfigId"] = new SelectList(_context.SessionConfigs, "Id", "Name", session.SessionConfigId);
+            return View(session);
+        }
+
+        // GET: Sessions/Live/5
+        public async Task<IActionResult> Live(Guid? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var session = await _context.Sessions
+                .Include(s => s.SessionConfig)
+                .FirstOrDefaultAsync(m => m.Id == id);
+            if (session == null)
+            {
+                return NotFound();
+            }
+
             return View(session);
         }
 

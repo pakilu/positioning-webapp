@@ -1,0 +1,93 @@
+@model App.Domain.Session
+
+@{
+    ViewData["Title"] = $"Live - {Model.Name}";
+}
+
+<h1>Live session: @Model.Name</h1>
+<p class="text-muted">
+    Config: <strong>@Model.SessionConfig?.Name</strong><br />
+    Started at: <strong>@(Model.StartedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-")</strong><br />
+    Session id: <code>@Model.Id</code>
+</p>
+<p>
+    Status: <span id="conn-status" class="badge bg-secondary">disconnected</span>
+</p>
+
+<div class="mb-3">
+    <a asp-action="Index" class="btn btn-secondary btn-sm">Back to sessions</a>
+    <a asp-action="Details" asp-route-id="@Model.Id" class="btn btn-outline-secondary btn-sm">Session details</a>
+</div>
+
+<h4>Trilateration results</h4>
+<table class="table table-sm">
+    <thead>
+        <tr>
+            <th>Time</th>
+            <th>Tag</th>
+            <th>X</th>
+            <th>Y</th>
+            <th>Z</th>
+            <th>Accuracy</th>
+        </tr>
+    </thead>
+    <tbody id="positions"></tbody>
+</table>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+    <script src="~/js/positioning-live.js" asp-append-version="true"></script>
+    <script>
+        const SESSION_ID = "@Model.Id";
+        const MAX_ROWS = 50;
+        const statusEl = document.getElementById("conn-status");
+        const posBody  = document.getElementById("positions");
+
+        async function joinThisSession() {
+            try {
+                if (window.PositioningHub) {
+                    await window.PositioningHub.joinSession(SESSION_ID);
+                    console.info("[positioning] joined session", SESSION_ID);
+                }
+            } catch (err) {
+                console.warn("[positioning] joinSession failed", err);
+            }
+        }
+
+        window.addEventListener("positioning:connected", () => {
+            statusEl.textContent = "connected";
+            statusEl.className = "badge bg-success";
+            joinThisSession();
+        });
+        window.addEventListener("positioning:disconnected", () => {
+            statusEl.textContent = "disconnected";
+            statusEl.className = "badge bg-danger";
+        });
+
+        function prepend(tbody, html) {
+            tbody.insertAdjacentHTML("afterbegin", html);
+            while (tbody.rows.length > MAX_ROWS) tbody.deleteRow(tbody.rows.length - 1);
+        }
+
+        window.addEventListener("positioning:position", e => {
+            const m = e.detail;
+            // Filter: only show results for this session. The server also
+            // broadcasts to the per-session group, but the all-clients
+            // broadcast would otherwise leak other sessions in.
+            const msgSession = m.sessionId ?? m.SessionId;
+            if (msgSession && msgSession.toString().toLowerCase() !== SESSION_ID.toLowerCase()) {
+                return;
+            }
+
+            const tag = m.tagDeviceId ?? m.tagId ?? "";
+            const x = m.xCoord ?? m.x ?? "";
+            const y = m.yCoord ?? m.y ?? "";
+            const z = m.zCoord ?? m.z ?? "";
+            prepend(posBody, `<tr>
+                <td>${new Date(m.recordedAt).toLocaleTimeString()}</td>
+                <td>${tag}</td>
+                <td>${x}</td><td>${y}</td><td>${z}</td>
+                <td>${m.accuracy ?? ""}</td></tr>`);
+        });
+    </script>
+}
