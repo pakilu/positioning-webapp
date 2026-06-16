@@ -58,13 +58,8 @@ namespace WebApp.Areas.Admin.Controllers
             ModelState.Remove(nameof(Session.SessionConfig));
             if (ModelState.IsValid)
             {
-                var now = DateTime.UtcNow;
                 session.Id = Guid.NewGuid();
-                session.Status = ESessionStatus.Active;
-                session.StartedAt = now;
-                session.EndedAt = null;
-                session.CreatedAt = now;
-                session.UpdatedAt = now;
+                StartSession(session);
                 _context.Add(session);
                 await _context.SaveChangesAsync();
                 return RedirectToAction(nameof(Live), new { id = session.Id });
@@ -116,7 +111,7 @@ namespace WebApp.Areas.Admin.Controllers
         // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(Guid id, [Bind("Id,SessionConfigId,Name,Status,StartedAt,EndedAt,CreatedAt,UpdatedAt")] Session session)
+        public async Task<IActionResult> Edit(Guid id, [Bind("Id,SessionConfigId,Name")] Session session)
         {
             if (id != session.Id)
             {
@@ -128,7 +123,15 @@ namespace WebApp.Areas.Admin.Controllers
             {
                 try
                 {
-                    _context.Update(session);
+                    var existing = await GetTrackedSessionAsync(id);
+                    if (existing == null)
+                    {
+                        return NotFound();
+                    }
+
+                    existing.SessionConfigId = session.SessionConfigId;
+                    existing.Name = session.Name;
+                    existing.UpdatedAt = DateTime.UtcNow;
                     await _context.SaveChangesAsync();
                 }
                 catch (DbUpdateConcurrencyException)
@@ -146,6 +149,51 @@ namespace WebApp.Areas.Admin.Controllers
             }
             ViewData["SessionConfigId"] = new SelectList(_context.SessionConfigs, "Id", "Name", session.SessionConfigId);
             return View(session);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Activate(Guid id)
+        {
+            var session = await GetTrackedSessionAsync(id);
+            if (session == null)
+            {
+                return NotFound();
+            }
+
+            StartSession(session);
+            await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(Live), new { id });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Finish(Guid id)
+        {
+            var session = await GetTrackedSessionAsync(id);
+            if (session == null)
+            {
+                return NotFound();
+            }
+
+            EndSession(session, ESessionStatus.Finished);
+            await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(Live), new { id });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Cancel(Guid id)
+        {
+            var session = await GetTrackedSessionAsync(id);
+            if (session == null)
+            {
+                return NotFound();
+            }
+
+            EndSession(session, ESessionStatus.Cancelled);
+            await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(Live), new { id });
         }
 
         // GET: Sessions/Delete/5
@@ -185,6 +233,35 @@ namespace WebApp.Areas.Admin.Controllers
         private bool SessionExists(Guid id)
         {
             return _context.Sessions.Any(e => e.Id == id);
+        }
+
+        private Task<Session?> GetTrackedSessionAsync(Guid id)
+        {
+            return _context.Sessions
+                .AsTracking()
+                .FirstOrDefaultAsync(s => s.Id == id);
+        }
+
+        private static void StartSession(Session session)
+        {
+            var now = DateTime.UtcNow;
+            session.Status = ESessionStatus.Active;
+            session.StartedAt ??= now;
+            session.EndedAt = null;
+            if (session.CreatedAt == default)
+            {
+                session.CreatedAt = now;
+            }
+            session.UpdatedAt = now;
+        }
+
+        private static void EndSession(Session session, ESessionStatus status)
+        {
+            var now = DateTime.UtcNow;
+            session.Status = status;
+            session.StartedAt ??= now;
+            session.EndedAt = now;
+            session.UpdatedAt = now;
         }
     }
 }
