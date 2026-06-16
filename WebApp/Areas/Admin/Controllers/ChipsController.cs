@@ -99,7 +99,9 @@ namespace WebApp.Areas.Admin.Controllers
             {
                 try
                 {
-                    var existing = await _context.Chips.FindAsync(id);
+                    var existing = await _context.Chips
+                        .AsTracking()
+                        .FirstOrDefaultAsync(x => x.Id == id);
                     if (existing == null)
                     {
                         return NotFound();

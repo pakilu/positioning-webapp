@@ -52,10 +52,21 @@ namespace WebApp.ApiControllers
                 return BadRequest();
             }
 
-            _context.Entry(chip).State = EntityState.Modified;
-
             try
             {
+                var existing = await _context.Chips
+                    .AsTracking()
+                    .FirstOrDefaultAsync(x => x.Id == id);
+                if (existing == null)
+                {
+                    return NotFound();
+                }
+
+                existing.Name = chip.Name;
+                existing.DeviceIdentifier = chip.DeviceIdentifier.Trim();
+                existing.Description = chip.Description;
+                existing.UpdatedAt = DateTime.UtcNow;
+
                 await _context.SaveChangesAsync();
             }
             catch (DbUpdateConcurrencyException)
