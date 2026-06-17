@@ -143,16 +143,22 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
     }
 
     /// <summary>
-    /// Handles chip-registration announcements. Accepts either a plain MAC
-    /// string payload (e.g. <c>"AA:BB:CC:11:22:33"</c>) or a small JSON
-    /// object with a MAC field, such as <c>{"macAddress":"..."}</c>. If the MAC isn't already known, a new
-    /// <see cref="Chip"/> row is inserted with the MAC as both
-    /// DeviceIdentifier and Name. The operator can rename it later.
+    /// Handles chip-registration announcements. Expected JSON shape:
+    /// <c>{"deviceIdentifier":"0x01","macAddress":"AA:BB:CC:11:22:33"}</c>.
+    /// The short <c>deviceIdentifier</c> is stored as <see cref="Chip.DeviceIdentifier"/>
+    /// (this is the value carried in the DW3000 over-the-air frames and in
+    /// raw-measurement MQTT messages, so it's the join key used by the
+    /// positioning pipeline). The MAC, when present, is used as the chip's
+    /// default <see cref="Chip.Name"/> so the operator can recognise the
+    /// hardware in the admin UI. Both are also accepted under the legacy
+    /// field names <c>tagDeviceId</c> / <c>mac</c>, and a bare MAC string
+    /// payload is still tolerated for backwards compatibility (in which case
+    /// the MAC is used as the DeviceIdentifier, matching the old behaviour).
     /// </summary>
     private async Task HandleRegistrationAsync(string payload)
     {
-        var mac = ExtractMac(payload);
-        if (string.IsNullOrWhiteSpace(mac))
+        var reg = ParseRegistration(payload);
+        if (reg is null || string.IsNullOrWhiteSpace(reg.Value.DeviceIdentifier))
         {
             _logger.LogWarning("Empty/invalid registration payload: {Payload}", payload);
             return;
@@ -160,62 +166,91 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
 
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await GetOrCreateChipAsync(db, mac);
+        await RegisterChipAsync(db, reg.Value.DeviceIdentifier!, reg.Value.MacAddress);
     }
 
-    private static string? ExtractMac(string payload)
+    private readonly record struct RegistrationInfo(string? DeviceIdentifier, string? MacAddress);
+
+    private static RegistrationInfo? ParseRegistration(string payload)
     {
         if (string.IsNullOrWhiteSpace(payload)) return null;
         var trimmed = payload.Trim();
 
-        // JSON form: { "macAddress": "..." } or legacy { "mac": "..." }
+        // JSON form
         if (trimmed.StartsWith("{"))
         {
             try
             {
                 using var doc = JsonDocument.Parse(trimmed);
-                foreach (var propertyName in new[] { "macAddress", "mac" })
+                var root = doc.RootElement;
+
+                string? deviceId = null;
+                foreach (var name in new[] { "deviceIdentifier", "tagDeviceId", "anchorDeviceId" })
                 {
-                    if (doc.RootElement.TryGetProperty(propertyName, out var macProp) &&
-                        macProp.ValueKind == JsonValueKind.String)
+                    if (root.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String)
                     {
-                        return macProp.GetString()?.Trim();
+                        deviceId = p.GetString()?.Trim();
+                        if (!string.IsNullOrEmpty(deviceId)) break;
                     }
                 }
+
+                string? mac = null;
+                foreach (var name in new[] { "macAddress", "mac" })
+                {
+                    if (root.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String)
+                    {
+                        mac = p.GetString()?.Trim();
+                        if (!string.IsNullOrEmpty(mac)) break;
+                    }
+                }
+
+                // Legacy: if no explicit deviceIdentifier was sent but a MAC was,
+                // fall back to using the MAC as the identifier (old behaviour).
+                if (string.IsNullOrEmpty(deviceId)) deviceId = mac;
+
+                return new RegistrationInfo(deviceId, mac);
             }
-            catch (JsonException) { /* fall through */ }
-            return null;
+            catch (JsonException) { return null; }
         }
 
-        // Plain MAC string. Strip optional surrounding quotes.
-        return trimmed.Trim('"');
+        // Plain MAC string payload (legacy). Strip optional surrounding quotes.
+        var bare = trimmed.Trim('"');
+        return new RegistrationInfo(bare, bare);
     }
 
     /// <summary>
-    /// Looks up a chip by MAC, inserting a new row with the MAC as both
-    /// DeviceIdentifier and Name if none exists yet.
+    /// Looks up a chip by its short <paramref name="deviceIdentifier"/> and
+    /// inserts a new row if none exists. When the chip is being created and a
+    /// <paramref name="macAddress"/> is supplied, the MAC is used as the
+    /// initial <see cref="Chip.Name"/>; otherwise the device identifier is
+    /// used. Existing chips are left untouched so the operator's manual
+    /// renaming is preserved across re-registrations.
     /// </summary>
-    private async Task<Chip> GetOrCreateChipAsync(AppDbContext db, string deviceId)
+    private async Task<Chip> RegisterChipAsync(AppDbContext db, string deviceIdentifier, string? macAddress)
     {
-        var chip = await db.Chips.FirstOrDefaultAsync(c => c.DeviceIdentifier == deviceId);
+        var chip = await db.Chips.FirstOrDefaultAsync(c => c.DeviceIdentifier == deviceIdentifier);
         if (chip is not null) return chip;
+
+        var name = !string.IsNullOrWhiteSpace(macAddress) ? macAddress! : deviceIdentifier;
 
         chip = new Chip
         {
-            DeviceIdentifier = deviceId,
-            Name = deviceId,
+            DeviceIdentifier = deviceIdentifier,
+            Name = name,
         };
         db.Chips.Add(chip);
         try
         {
             await db.SaveChangesAsync();
-            _logger.LogInformation("Registered new chip {DeviceId}", deviceId);
+            _logger.LogInformation(
+                "Registered new chip DeviceIdentifier='{DeviceId}' Name='{Name}'",
+                deviceIdentifier, name);
         }
         catch (DbUpdateException)
         {
-            // Race: another message inserted the same MAC concurrently.
+            // Race: another message inserted the same identifier concurrently.
             db.Entry(chip).State = EntityState.Detached;
-            chip = await db.Chips.FirstAsync(c => c.DeviceIdentifier == deviceId);
+            chip = await db.Chips.FirstAsync(c => c.DeviceIdentifier == deviceIdentifier);
         }
         return chip;
     }
@@ -237,8 +272,19 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var tag    = await GetOrCreateChipAsync(db, msg.TagDeviceId);
-        var anchor = await GetOrCreateChipAsync(db, msg.AnchorDeviceId);
+        var tag    = await db.Chips.FirstOrDefaultAsync(c => c.DeviceIdentifier == msg.TagDeviceId);
+        var anchor = await db.Chips.FirstOrDefaultAsync(c => c.DeviceIdentifier == msg.AnchorDeviceId);
+
+        if (tag is null || anchor is null)
+        {
+            _logger.LogWarning(
+                "Raw measurement references unknown chip(s): tag DeviceIdentifier='{TagDeviceId}' (found={TagFound}), anchor DeviceIdentifier='{AnchorDeviceId}' (found={AnchorFound}). " +
+                "Chips must be registered via the chip-registration topic before they can be used. Skipping.",
+                msg.TagDeviceId, tag is not null,
+                msg.AnchorDeviceId, anchor is not null);
+            await BroadcastRawAsync(msg);
+            return;
+        }
 
         if (msg.SessionId is null)
         {

@@ -52,8 +52,11 @@ builder.Services.AddSingleton<IMeasurementBuffer, InMemoryMeasurementBuffer>();
 // SignalR sink for computed PositionResults.
 builder.Services.AddSingleton<IPositionResultPublisher, SignalRPositionResultPublisher>();
 
-// Pipeline options (could later be bound from configuration).
-builder.Services.AddSingleton(new PositioningPipelineOptions());
+// Pipeline options, bound from the "Positioning" section of appsettings.json
+// (falls back to the defaults on PositioningPipelineOptions when absent).
+var positioningOptions = new PositioningPipelineOptions();
+builder.Configuration.GetSection("Positioning").Bind(positioningOptions);
+builder.Services.AddSingleton(positioningOptions);
 
 // TimeProvider is registered by the framework, but make sure it's there.
 builder.Services.AddSingleton(TimeProvider.System);
