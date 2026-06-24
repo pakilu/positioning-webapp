@@ -91,11 +91,19 @@
                 <small>anchors</small>
             </div>
         </div>
+        <div class="plane-toolbar">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="zoom-in" title="Zoom in">+</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="zoom-out" title="Zoom out">&minus;</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="zoom-reset" title="Reset view">Reset</button>
+            <span class="plane-zoom-label" id="zoom-label">100%</span>
+        </div>
         <div id="position-plane" class="position-plane">
-            <div class="axis-label axis-x">X</div>
-            <div class="axis-label axis-y">Y</div>
-            <div id="tag-marker" class="tag-marker" hidden>
-                <span></span>
+            <div id="plane-content" class="plane-content">
+                <div class="axis-label axis-x">X</div>
+                <div class="axis-label axis-y">Y</div>
+                <div id="tag-marker" class="tag-marker" hidden>
+                    <span></span>
+                </div>
             </div>
         </div>
     </section>
@@ -129,7 +137,9 @@
         const statusEl = document.getElementById("conn-status");
         const posBody  = document.getElementById("positions");
         const plane = document.getElementById("position-plane");
+        const content = document.getElementById("plane-content");
         const marker = document.getElementById("tag-marker");
+        const zoomLabel = document.getElementById("zoom-label");
         const latestFix = document.getElementById("latest-fix");
         const tagNames = new Map(TAGS.map(t => [String(t.chipId).toLowerCase(), t.name]));
 
@@ -198,8 +208,80 @@
             el.style.top = `${p.top}%`;
             el.title = `${anchor.name} (${fmt(Number(anchor.x))}, ${fmt(Number(anchor.y))})`;
             el.innerHTML = `<span></span><strong>${anchor.name}</strong>`;
-            plane.appendChild(el);
+            content.appendChild(el);
         }
+
+        // --- pan & zoom ----------------------------------------------------
+        const view = { scale: 1, tx: 0, ty: 0 };
+        const MIN_SCALE = 0.25;
+        const MAX_SCALE = 8;
+
+        function applyView() {
+            content.style.transform = `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})`;
+            // counter-scale markers so dots and labels keep their size
+            const inv = 1 / view.scale;
+            content.querySelectorAll(".anchor-marker, .tag-marker").forEach(el => {
+                el.style.setProperty("--inv-scale", inv);
+            });
+            zoomLabel.textContent = `${Math.round(view.scale * 100)}%`;
+        }
+
+        function zoomAt(clientX, clientY, factor) {
+            const rect = plane.getBoundingClientRect();
+            const px = clientX - rect.left;
+            const py = clientY - rect.top;
+            const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, view.scale * factor));
+            const k = newScale / view.scale;
+            // keep the point under the cursor stationary
+            view.tx = px - k * (px - view.tx);
+            view.ty = py - k * (py - view.ty);
+            view.scale = newScale;
+            applyView();
+        }
+
+        plane.addEventListener("wheel", e => {
+            e.preventDefault();
+            const factor = Math.exp(-e.deltaY * 0.0015);
+            zoomAt(e.clientX, e.clientY, factor);
+        }, { passive: false });
+
+        let dragging = false;
+        let lastX = 0, lastY = 0;
+        plane.addEventListener("pointerdown", e => {
+            dragging = true;
+            lastX = e.clientX; lastY = e.clientY;
+            plane.setPointerCapture(e.pointerId);
+            plane.classList.add("is-panning");
+        });
+        plane.addEventListener("pointermove", e => {
+            if (!dragging) return;
+            view.tx += e.clientX - lastX;
+            view.ty += e.clientY - lastY;
+            lastX = e.clientX; lastY = e.clientY;
+            applyView();
+        });
+        function endDrag(e) {
+            if (!dragging) return;
+            dragging = false;
+            try { plane.releasePointerCapture(e.pointerId); } catch {}
+            plane.classList.remove("is-panning");
+        }
+        plane.addEventListener("pointerup", endDrag);
+        plane.addEventListener("pointercancel", endDrag);
+
+        document.getElementById("zoom-in").addEventListener("click", () => {
+            const r = plane.getBoundingClientRect();
+            zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1.25);
+        });
+        document.getElementById("zoom-out").addEventListener("click", () => {
+            const r = plane.getBoundingClientRect();
+            zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1 / 1.25);
+        });
+        document.getElementById("zoom-reset").addEventListener("click", () => {
+            view.scale = 1; view.tx = 0; view.ty = 0; applyView();
+        });
+
+        applyView();
 
         function updateMarker(m) {
             const x = Number(m.x);
@@ -279,16 +361,40 @@
             color: #5c6670;
         }
 
+        .plane-toolbar {
+            display: flex;
+            align-items: center;
+            gap: .35rem;
+            margin-bottom: .5rem;
+        }
+
+        .plane-zoom-label {
+            margin-left: .5rem;
+            color: #5c6670;
+            font-size: .8rem;
+        }
+
         .position-plane {
             position: relative;
             min-height: 520px;
             overflow: hidden;
             border: 1px solid #cfd6dd;
             border-radius: 8px;
+            background: #fbfcfd;
+            touch-action: none;
+            cursor: grab;
+        }
+
+        .position-plane.is-panning { cursor: grabbing; }
+
+        .plane-content {
+            position: absolute;
+            inset: 0;
+            transform-origin: 0 0;
             background:
                 linear-gradient(#eef2f5 1px, transparent 1px),
                 linear-gradient(90deg, #eef2f5 1px, transparent 1px),
-                #fbfcfd;
+                transparent;
             background-size: 40px 40px;
         }
 
@@ -313,7 +419,9 @@
         .anchor-marker,
         .tag-marker {
             position: absolute;
-            transform: translate(-50%, -50%);
+            --inv-scale: 1;
+            transform: translate(-50%, -50%) scale(var(--inv-scale));
+            transform-origin: center center;
             z-index: 2;
         }
 
@@ -343,6 +451,8 @@
             z-index: 3;
             transition: left .18s ease, top .18s ease;
         }
+
+        .tag-marker { transform: translate(-50%, -50%) scale(var(--inv-scale)); }
 
         .tag-marker::before {
             content: "";
