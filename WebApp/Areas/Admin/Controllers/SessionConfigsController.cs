@@ -49,11 +49,14 @@ namespace WebApp.Areas.Admin.Controllers
         // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("Id,Name,Description,PlannedDurationSeconds,CreatedAt,UpdatedAt")] SessionConfig sessionConfig)
+        public async Task<IActionResult> Create([Bind("Name,Description,PlannedDurationSeconds")] SessionConfig sessionConfig)
         {
             if (ModelState.IsValid)
             {
+                var now = DateTime.UtcNow;
                 sessionConfig.Id = Guid.NewGuid();
+                sessionConfig.CreatedAt = now;
+                sessionConfig.UpdatedAt = now;
                 _context.Add(sessionConfig);
                 await _context.SaveChangesAsync();
                 return RedirectToAction(nameof(Index));
@@ -82,7 +85,7 @@ namespace WebApp.Areas.Admin.Controllers
         // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(Guid id, [Bind("Id,Name,Description,PlannedDurationSeconds,CreatedAt,UpdatedAt")] SessionConfig sessionConfig)
+        public async Task<IActionResult> Edit(Guid id, [Bind("Id,Name,Description,PlannedDurationSeconds")] SessionConfig sessionConfig)
         {
             if (id != sessionConfig.Id)
             {
@@ -93,7 +96,18 @@ namespace WebApp.Areas.Admin.Controllers
             {
                 try
                 {
-                    _context.Update(sessionConfig);
+                    var existing = await _context.SessionConfigs
+                        .AsTracking()
+                        .FirstOrDefaultAsync(x => x.Id == id);
+                    if (existing == null)
+                    {
+                        return NotFound();
+                    }
+
+                    existing.Name = sessionConfig.Name;
+                    existing.Description = sessionConfig.Description;
+                    existing.PlannedDurationSeconds = sessionConfig.PlannedDurationSeconds;
+                    existing.UpdatedAt = DateTime.UtcNow;
                     await _context.SaveChangesAsync();
                 }
                 catch (DbUpdateConcurrencyException)

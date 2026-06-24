@@ -8,6 +8,10 @@ namespace WebApp.Areas.Admin.Controllers
 {
     public class SessionsController : Controller
     {
+        // The least-squares trilateration solver needs at least three
+        // anchors with known coordinates to produce a 2D fix.
+        public const int MinAnchorsForTrilateration = 3;
+
         private readonly AppDbContext _context;
 
         public SessionsController(AppDbContext context)
@@ -58,11 +62,20 @@ namespace WebApp.Areas.Admin.Controllers
             ModelState.Remove(nameof(Session.SessionConfig));
             if (ModelState.IsValid)
             {
-                session.Id = Guid.NewGuid();
-                StartSession(session);
-                _context.Add(session);
-                await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Live), new { id = session.Id });
+                var conflict = await FindActiveSessionForConfigAsync(session.SessionConfigId);
+                if (conflict is not null)
+                {
+                    ModelState.AddModelError(nameof(Session.SessionConfigId),
+                        $"Another session ('{conflict.Name}') is already active for this room layout. Finish or cancel it before starting a new one.");
+                }
+                else
+                {
+                    session.Id = Guid.NewGuid();
+                    StartSession(session);
+                    _context.Add(session);
+                    await _context.SaveChangesAsync();
+                    return RedirectToAction(nameof(Live), new { id = session.Id });
+                }
             }
             ViewData["SessionConfigId"] = new SelectList(_context.SessionConfigs, "Id", "Name", session.SessionConfigId);
             return View(session);
@@ -161,6 +174,15 @@ namespace WebApp.Areas.Admin.Controllers
                 return NotFound();
             }
 
+            var conflict = await FindActiveSessionForConfigAsync(session.SessionConfigId, excludeId: id);
+            if (conflict is not null)
+            {
+                TempData["Error"] =
+                    $"Cannot activate this session: another session ('{conflict.Name}') is already active for the same room layout. " +
+                    "Finish or cancel it first.";
+                return RedirectToAction(nameof(Live), new { id });
+            }
+
             StartSession(session);
             await _context.SaveChangesAsync();
             return RedirectToAction(nameof(Live), new { id });
@@ -240,6 +262,20 @@ namespace WebApp.Areas.Admin.Controllers
             return _context.Sessions
                 .AsTracking()
                 .FirstOrDefaultAsync(s => s.Id == id);
+        }
+
+        /// <summary>
+        /// Finds an active session bound to <paramref name="sessionConfigId"/>, optionally
+        /// ignoring the session with id <paramref name="excludeId"/> (used when re-activating
+        /// a session so it does not count itself as a conflict).
+        /// </summary>
+        private Task<Session?> FindActiveSessionForConfigAsync(Guid sessionConfigId, Guid? excludeId = null)
+        {
+            return _context.Sessions
+                .Where(s => s.Status == ESessionStatus.Active
+                            && s.SessionConfigId == sessionConfigId
+                            && (excludeId == null || s.Id != excludeId))
+                .FirstOrDefaultAsync();
         }
 
         private static void StartSession(Session session)

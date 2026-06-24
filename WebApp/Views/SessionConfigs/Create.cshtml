@@ -1,12 +1,12 @@
 @model App.Domain.SessionConfig
 
 @{
-    ViewData["Title"] = "Create";
+    ViewData["Title"] = "Create room layout";
 }
 
-<h1>Create</h1>
+<h1>Create room layout</h1>
 
-<h4>SessionConfig</h4>
+<h4>Room layout</h4>
 <hr />
 <div class="row">
     <div class="col-md-4">
@@ -27,18 +27,9 @@
                 <input asp-for="PlannedDurationSeconds" class="form-control" />
                 <span asp-validation-for="PlannedDurationSeconds" class="text-danger"></span>
             </div>
-            <div class="form-group">
-                <label asp-for="CreatedAt" class="control-label"></label>
-                <input asp-for="CreatedAt" class="form-control" />
-                <span asp-validation-for="CreatedAt" class="text-danger"></span>
-            </div>
-            <div class="form-group">
-                <label asp-for="UpdatedAt" class="control-label"></label>
-                <input asp-for="UpdatedAt" class="form-control" />
-                <span asp-validation-for="UpdatedAt" class="text-danger"></span>
-            </div>
-            <div class="form-group">
+            <div class="form-group mt-3">
                 <input type="submit" value="Create" class="btn btn-primary" />
+                <a asp-action="Index" class="btn btn-secondary">Cancel</a>
             </div>
         </form>
     </div>

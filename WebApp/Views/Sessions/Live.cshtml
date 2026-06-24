@@ -1,9 +1,11 @@
 @model App.Domain.Session
 @using App.Domain
 @using System.Text.Json
+@using WebApp.Areas.Admin.Controllers
 
 @{
     ViewData["Title"] = $"Live - {Model.Name}";
+    var minAnchors = SessionsController.MinAnchorsForTrilateration;
     var anchors = Model.SessionConfig?.SessionConfigChips
         .Where(c => c.Role == App.Domain.EChipRole.Anchor && c.XCoord != null && c.YCoord != null)
         .Select(c => new
@@ -31,6 +33,24 @@
 }
 
 <h1>Live session: @Model.Name</h1>
+
+@if (TempData["Error"] is string errorMessage)
+{
+    <div class="alert alert-danger" role="alert">
+        @errorMessage
+    </div>
+}
+
+@if (anchors.Count < minAnchors)
+{
+    <div class="alert alert-warning" role="alert">
+        <strong>Not enough anchors for trilateration.</strong>
+        This layout has <strong>@anchors.Count</strong> anchor@(anchors.Count == 1 ? "" : "s") with coordinates, but at least
+        <strong>@minAnchors</strong> are required to compute a position fix.
+        <a asp-controller="SessionConfigChips" asp-action="Index">Add more anchors to the layout</a>
+        and make sure each has X and Y coordinates set.
+    </div>
+}
 <p class="text-muted">
     Config: <strong>@Model.SessionConfig?.Name</strong><br />
     Session status: <strong>@Model.Status</strong><br />
