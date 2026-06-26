@@ -103,6 +103,7 @@
                 <div class="axis-label axis-y">Y</div>
                 <div id="tag-marker" class="tag-marker" hidden>
                     <span></span>
+                    <strong></strong>
                 </div>
             </div>
         </div>
@@ -292,7 +293,7 @@
             marker.hidden = false;
             marker.style.left = `${p.left}%`;
             marker.style.top = `${p.top}%`;
-            marker.querySelector("span").textContent = tagLabel(m.tagId);
+            marker.querySelector("strong").textContent = tagLabel(m.tagId);
             latestFix.textContent = `Tag ${tagLabel(m.tagId)} at X ${fmt(x)}, Y ${fmt(y)}, Z ${fmt(Number(m.z))}`;
         }
 
@@ -452,29 +453,40 @@
             transition: left .18s ease, top .18s ease;
         }
 
-        .tag-marker { transform: translate(-50%, -50%) scale(var(--inv-scale)); }
-
         .tag-marker::before {
             content: "";
             position: absolute;
-            inset: -13px;
+            left: 50%;
+            top: 0;
+            width: 18px;
+            height: 18px;
+            transform: translate(-50%, -50%);
             border: 2px solid rgba(36, 133, 74, .28);
             border-radius: 50%;
+            pointer-events: none;
         }
 
         .tag-marker span {
-            display: grid;
-            min-width: 3.75rem;
-            min-height: 3.75rem;
-            padding: .35rem;
-            place-items: center;
-            border: 3px solid white;
+            display: block;
+            width: 10px;
+            height: 10px;
+            border: 2px solid white;
             border-radius: 50%;
             background: #24854a;
-            color: white;
-            box-shadow: 0 8px 24px rgba(20, 67, 42, .25);
-            font-size: .78rem;
+            box-shadow: 0 2px 4px rgba(20, 67, 42, .35);
+        }
+
+        .tag-marker strong {
+            display: block;
+            margin-top: .25rem;
+            max-width: 8rem;
+            color: #24854a;
+            font-size: .75rem;
             font-weight: 700;
+            text-align: center;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         @@media (max-width: 900px) {
