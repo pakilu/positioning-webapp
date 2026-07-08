@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Extensions.ManagedClient;
+using MQTTnet.Protocol;
 using WebApp.Hubs;
 using WebApp.Models.Mqtt;
 
@@ -21,7 +22,7 @@ namespace WebApp.Services;
 ///  3. Deserializes JSON payloads, optionally persists them to the DB,
 ///     and broadcasts them to SignalR clients on <see cref="PositioningHub"/>.
 /// </summary>
-public class MqttIngestService : IHostedService, IAsyncDisposable
+public class MqttIngestService : IHostedService, IAnchorListPublisher, IAsyncDisposable
 {
     private readonly ILogger<MqttIngestService> _logger;
     private readonly MqttOptions _options;
@@ -105,6 +106,95 @@ public class MqttIngestService : IHostedService, IAsyncDisposable
         {
             await _client.StopAsync();
         }
+    }
+
+    // ------------------------------------------------------------------
+    // IAnchorListPublisher
+    // ------------------------------------------------------------------
+
+    public async Task PublishAnchorListAsync(
+        string tagDeviceIdentifier,
+        IEnumerable<string> anchorDeviceIdentifiers,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(tagDeviceIdentifier))
+        {
+            _logger.LogWarning("PublishAnchorListAsync called with empty tag DeviceIdentifier; skipping.");
+            return;
+        }
+
+        if (_client is null)
+        {
+            _logger.LogWarning("MQTT client not initialized yet; cannot publish anchor list for tag {TagId}.", tagDeviceIdentifier);
+            return;
+        }
+
+        // Dedupe + drop empties while preserving order.
+        var anchors = anchorDeviceIdentifiers
+            .Where(a => !string.IsNullOrWhiteSpace(a))
+            .Select(a => a.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var topic = BuildAnchorListTopic(tagDeviceIdentifier);
+        var payload = JsonSerializer.Serialize(anchors);
+
+        var message = new MqttApplicationMessageBuilder()
+            .WithTopic(topic)
+            .WithPayload(payload)
+            .WithRetainFlag(true)
+            .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
+            .Build();
+
+        await _client.EnqueueAsync(message);
+
+        _logger.LogInformation(
+            "Published anchor list to '{Topic}' (retained, {Count} anchors): {Payload}",
+            topic, anchors.Length, payload);
+    }
+
+    public async Task PublishForSessionAsync(Guid sessionId, bool clear = false, CancellationToken cancellationToken = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var session = await db.Sessions
+            .Include(s => s.SessionConfig)
+                .ThenInclude(sc => sc.SessionConfigChips)
+                    .ThenInclude(scc => scc.Chip)
+            .FirstOrDefaultAsync(s => s.Id == sessionId, cancellationToken);
+
+        if (session is null)
+        {
+            _logger.LogWarning("PublishForSessionAsync: session {SessionId} not found.", sessionId);
+            return;
+        }
+
+        var chips = session.SessionConfig.SessionConfigChips;
+
+        var tagIds = chips
+            .Where(c => c.Role == EChipRole.Tag && c.Chip != null && !string.IsNullOrWhiteSpace(c.Chip.DeviceIdentifier))
+            .Select(c => c.Chip.DeviceIdentifier!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var anchorIds = clear
+            ? Array.Empty<string>()
+            : chips
+                .Where(c => c.Role == EChipRole.Anchor && c.Chip != null && !string.IsNullOrWhiteSpace(c.Chip.DeviceIdentifier))
+                .Select(c => c.Chip.DeviceIdentifier!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+        foreach (var tag in tagIds)
+        {
+            await PublishAnchorListAsync(tag, anchorIds, cancellationToken);
+        }
+    }
+
+    private string BuildAnchorListTopic(string tagDeviceIdentifier)
+    {
+        return _options.AnchorListTopicTemplate.Replace("{tagDeviceId}", tagDeviceIdentifier);
     }
 
     private async Task OnMessageReceivedAsync(MqttApplicationMessageReceivedEventArgs e)

@@ -66,7 +66,12 @@ builder.Services.AddSingleton<IPositioningPipeline, PositioningPipeline>();
 // ---------------------------------------------------------------------------
 
 // Background service that subscribes to Mosquitto and re-broadcasts via SignalR.
-builder.Services.AddHostedService<MqttIngestService>();
+// Registered as a singleton so it can also serve as IAnchorListPublisher
+// (SessionsController publishes retained anchor lists through the same
+// managed MQTT client on session lifecycle events).
+builder.Services.AddSingleton<MqttIngestService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttIngestService>());
+builder.Services.AddSingleton<IAnchorListPublisher>(sp => sp.GetRequiredService<MqttIngestService>());
 // ---------------------------------------------------------------------------
 
 var app = builder.Build();

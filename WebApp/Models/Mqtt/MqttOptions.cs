@@ -37,4 +37,14 @@ public class MqttOptions
 
     /// <summary>If true, incoming messages are also persisted to the database.</summary>
     public bool PersistToDatabase { get; set; } = true;
+
+    /// <summary>
+    /// Retained topic template the webapp publishes to so each tag learns which
+    /// anchors it should range against. <c>{tagDeviceId}</c> is substituted
+    /// with the tag's <see cref="App.Domain.Chip.DeviceIdentifier"/>
+    /// (e.g. <c>0x01</c>). Payload is a JSON array of anchor DeviceIdentifier
+    /// hex strings, e.g. <c>["0x02","0x03","0x04"]</c>. Publishing an empty
+    /// array tells the tag to stop ranging.
+    /// </summary>
+    public string AnchorListTopicTemplate { get; set; } = "uwb/tags/{tagDeviceId}/anchors";
 }

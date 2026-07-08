@@ -3,6 +3,7 @@ using App.Domain;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using WebApp.Services;
 
 namespace WebApp.Areas.Admin.Controllers
 {
@@ -13,10 +14,31 @@ namespace WebApp.Areas.Admin.Controllers
         public const int MinAnchorsForTrilateration = 3;
 
         private readonly AppDbContext _context;
+        private readonly IAnchorListPublisher _anchorListPublisher;
+        private readonly ILogger<SessionsController> _logger;
 
-        public SessionsController(AppDbContext context)
+        public SessionsController(
+            AppDbContext context,
+            IAnchorListPublisher anchorListPublisher,
+            ILogger<SessionsController> logger)
         {
             _context = context;
+            _anchorListPublisher = anchorListPublisher;
+            _logger = logger;
+        }
+
+        private async Task TryPublishAnchorsAsync(Guid sessionId, bool clear)
+        {
+            try
+            {
+                await _anchorListPublisher.PublishForSessionAsync(sessionId, clear);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Failed to publish anchor list for session {SessionId} (clear={Clear})",
+                    sessionId, clear);
+            }
         }
 
         // GET: Sessions
@@ -74,6 +96,7 @@ namespace WebApp.Areas.Admin.Controllers
                     StartSession(session);
                     _context.Add(session);
                     await _context.SaveChangesAsync();
+                    await TryPublishAnchorsAsync(session.Id, clear: false);
                     return RedirectToAction(nameof(Live), new { id = session.Id });
                 }
             }
@@ -185,6 +208,7 @@ namespace WebApp.Areas.Admin.Controllers
 
             StartSession(session);
             await _context.SaveChangesAsync();
+            await TryPublishAnchorsAsync(id, clear: false);
             return RedirectToAction(nameof(Live), new { id });
         }
 
@@ -200,6 +224,7 @@ namespace WebApp.Areas.Admin.Controllers
 
             EndSession(session, ESessionStatus.Finished);
             await _context.SaveChangesAsync();
+            await TryPublishAnchorsAsync(id, clear: true);
             return RedirectToAction(nameof(Live), new { id });
         }
 
@@ -215,6 +240,7 @@ namespace WebApp.Areas.Admin.Controllers
 
             EndSession(session, ESessionStatus.Cancelled);
             await _context.SaveChangesAsync();
+            await TryPublishAnchorsAsync(id, clear: true);
             return RedirectToAction(nameof(Live), new { id });
         }
 
