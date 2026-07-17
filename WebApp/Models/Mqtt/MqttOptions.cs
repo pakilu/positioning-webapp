@@ -8,6 +8,9 @@ public class MqttOptions
 {
     public const string SectionName = "Mqtt";
 
+    /// <summary>If true, the webapp connects to the configured MQTT broker.</summary>
+    public bool Enabled { get; set; } = true;
+
     /// <summary>Mosquitto broker host (e.g. "localhost").</summary>
     public string Host { get; set; } = "localhost";
 

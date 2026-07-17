@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using WebApp.Hubs;
 using WebApp.Models.Mqtt;
+using WebApp.Models.Serial;
 using WebApp.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -38,6 +39,7 @@ builder.Services.AddSignalR();
 
 // MQTT settings bound from appsettings.json ("Mqtt" section).
 builder.Services.Configure<MqttOptions>(builder.Configuration.GetSection(MqttOptions.SectionName));
+builder.Services.Configure<SerialOptions>(builder.Configuration.GetSection(SerialOptions.SectionName));
 
 // --- Positioning pipeline ---------------------------------------------------
 // Pure math; singleton.
@@ -63,6 +65,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 
 // The orchestrator itself.
 builder.Services.AddSingleton<IPositioningPipeline, PositioningPipeline>();
+builder.Services.AddSingleton<IngestProcessor>();
 // ---------------------------------------------------------------------------
 
 // Background service that subscribes to Mosquitto and re-broadcasts via SignalR.
@@ -72,6 +75,7 @@ builder.Services.AddSingleton<IPositioningPipeline, PositioningPipeline>();
 builder.Services.AddSingleton<MqttIngestService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttIngestService>());
 builder.Services.AddSingleton<IAnchorListPublisher>(sp => sp.GetRequiredService<MqttIngestService>());
+builder.Services.AddHostedService<SerialIngestService>();
 // ---------------------------------------------------------------------------
 
 var app = builder.Build();

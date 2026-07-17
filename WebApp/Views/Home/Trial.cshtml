@@ -1,0 +1,213 @@
+@{
+    ViewData["Title"] = "Trial";
+}
+
+@section Styles {
+    <style>
+        .trial-toolbar {
+            display: flex;
+            gap: .5rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .trial-counter {
+            min-width: 7rem;
+            padding: .75rem;
+            border: 1px solid #e7d3db;
+            border-radius: .5rem;
+            background: #fff8fa;
+        }
+
+        .trial-counter strong {
+            display: block;
+            font-size: 1.5rem;
+            line-height: 1;
+        }
+
+        .trial-log {
+            height: 55vh;
+            overflow: auto;
+            border: 1px solid #e2d6db;
+            border-radius: .5rem;
+            background: #151316;
+            color: #f7edf1;
+            font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+            font-size: .875rem;
+            padding: .75rem;
+            white-space: pre-wrap;
+        }
+
+        .trial-event {
+            border-bottom: 1px solid #3b3338;
+            padding: .5rem 0;
+        }
+
+        .trial-event:first-child {
+            padding-top: 0;
+        }
+
+        .trial-event-meta {
+            color: #f0a8c0;
+            margin-bottom: .25rem;
+        }
+
+        .trial-json {
+            margin: 0;
+            color: #f6f3f4;
+        }
+    </style>
+}
+
+<div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+    <div>
+        <h1 class="mb-1">Trial feed</h1>
+        <p class="text-muted mb-0">Every raw measurement and position message received by the browser is printed below.</p>
+    </div>
+    <div class="trial-toolbar">
+        <span>Status: <span id="trial-status" class="badge bg-secondary">connecting</span></span>
+        <button id="pause-log" type="button" class="btn btn-sm btn-outline-secondary">Pause</button>
+        <button id="clear-log" type="button" class="btn btn-sm btn-outline-danger">Clear</button>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-sm-4 col-lg-2">
+        <div class="trial-counter">
+            <span class="text-muted">Raw</span>
+            <strong id="raw-count">0</strong>
+        </div>
+    </div>
+    <div class="col-sm-4 col-lg-2">
+        <div class="trial-counter">
+            <span class="text-muted">Positions</span>
+            <strong id="position-count">0</strong>
+        </div>
+    </div>
+    <div class="col-sm-4 col-lg-2">
+        <div class="trial-counter">
+            <span class="text-muted">Total</span>
+            <strong id="total-count">0</strong>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <table class="table table-sm mb-0">
+            <tbody>
+            <tr>
+                <th class="text-nowrap">Last tag</th>
+                <td id="last-tag">-</td>
+                <th class="text-nowrap">Last anchor</th>
+                <td id="last-anchor">-</td>
+            </tr>
+            <tr>
+                <th class="text-nowrap">Distance</th>
+                <td id="last-distance">-</td>
+                <th class="text-nowrap">Last time</th>
+                <td id="last-time">-</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="trial-log" class="trial-log" aria-live="polite"></div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+    <script src="~/js/positioning-live.js" asp-append-version="true"></script>
+    <script>
+        const statusEl = document.getElementById("trial-status");
+        const logEl = document.getElementById("trial-log");
+        const pauseBtn = document.getElementById("pause-log");
+        const clearBtn = document.getElementById("clear-log");
+        const rawCountEl = document.getElementById("raw-count");
+        const positionCountEl = document.getElementById("position-count");
+        const totalCountEl = document.getElementById("total-count");
+        const lastTagEl = document.getElementById("last-tag");
+        const lastAnchorEl = document.getElementById("last-anchor");
+        const lastDistanceEl = document.getElementById("last-distance");
+        const lastTimeEl = document.getElementById("last-time");
+
+        let rawCount = 0;
+        let positionCount = 0;
+        let paused = false;
+
+        function setStatus(text, badge) {
+            statusEl.textContent = text;
+            statusEl.className = `badge ${badge}`;
+        }
+
+        function formatTime(value) {
+            const date = value ? new Date(value) : new Date();
+            return Number.isNaN(date.getTime()) ? new Date().toLocaleTimeString() : date.toLocaleTimeString();
+        }
+
+        function updateCounters() {
+            rawCountEl.textContent = rawCount;
+            positionCountEl.textContent = positionCount;
+            totalCountEl.textContent = rawCount + positionCount;
+        }
+
+        function appendEvent(type, msg) {
+            if (paused) return;
+
+            const wrapper = document.createElement("div");
+            wrapper.className = "trial-event";
+
+            const meta = document.createElement("div");
+            meta.className = "trial-event-meta";
+            meta.textContent = `${new Date().toLocaleTimeString()}  ${type}`;
+
+            const json = document.createElement("pre");
+            json.className = "trial-json";
+            json.textContent = JSON.stringify(msg, null, 2);
+
+            wrapper.append(meta, json);
+            logEl.prepend(wrapper);
+
+            while (logEl.children.length > 300) {
+                logEl.removeChild(logEl.lastElementChild);
+            }
+        }
+
+        window.addEventListener("positioning:connected", () => setStatus("connected", "bg-success"));
+        window.addEventListener("positioning:disconnected", () => setStatus("disconnected", "bg-danger"));
+
+        window.addEventListener("positioning:raw", e => {
+            const msg = e.detail;
+            rawCount += 1;
+            updateCounters();
+
+            lastTagEl.textContent = msg.tagDeviceId ?? "-";
+            lastAnchorEl.textContent = msg.anchorDeviceId ?? "-";
+            lastDistanceEl.textContent = msg.distance ?? "-";
+            lastTimeEl.textContent = formatTime(msg.recordedAt);
+
+            appendEvent("RawMeasurement", msg);
+        });
+
+        window.addEventListener("positioning:position", e => {
+            const msg = e.detail;
+            positionCount += 1;
+            updateCounters();
+            appendEvent("PositionResult", msg);
+        });
+
+        pauseBtn.addEventListener("click", () => {
+            paused = !paused;
+            pauseBtn.textContent = paused ? "Resume" : "Pause";
+            pauseBtn.className = paused ? "btn btn-sm btn-secondary" : "btn btn-sm btn-outline-secondary";
+        });
+
+        clearBtn.addEventListener("click", () => {
+            rawCount = 0;
+            positionCount = 0;
+            updateCounters();
+            logEl.replaceChildren();
+            lastTagEl.textContent = "-";
+            lastAnchorEl.textContent = "-";
+            lastDistanceEl.textContent = "-";
+            lastTimeEl.textContent = "-";
+        });
+    </script>
+}

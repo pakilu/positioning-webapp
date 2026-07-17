@@ -1,6 +1,6 @@
 # Positioning Webapp
 
-ASP.NET Core (net10.0) web application for an Ultra-Wideband (UWB) indoor positioning system. The app ingests raw range measurements from UWB tags over MQTT, solves for tag positions in 2D or 3D, persists results to PostgreSQL via Entity Framework Core, and exposes both MVC admin views and a versioned REST API.
+ASP.NET Core (net10.0) web application for an Ultra-Wideband (UWB) indoor positioning system. The app ingests raw range measurements from UWB tags over MQTT or USB serial, solves for tag positions in 2D or 3D, persists results to PostgreSQL via Entity Framework Core, and exposes both MVC admin views and a versioned REST API.
 
 ## Solution layout
 
@@ -14,7 +14,7 @@ ASP.NET Core (net10.0) web application for an Ultra-Wideband (UWB) indoor positi
 
 - .NET 10 SDK
 - PostgreSQL (default connection points at `127.0.0.1:5432`, db `positioning_db`, user/password `postgres`)
-- An MQTT broker (default `localhost:1883`)
+- An MQTT broker (default `localhost:1883`) or one USB serial gateway
 - EF Core CLI tool:
 
 ```bash
@@ -46,6 +46,7 @@ Settings for the MQTT ingestion client.
 
 | Key | Description |
 |---|---|
+| `Enabled` | If `true`, the webapp connects to the MQTT broker. Set to `false` when using USB serial only. |
 | `Host`, `Port` | Broker endpoint. |
 | `ClientId` | MQTT client id used by the webapp. |
 | `Username`, `Password` | Optional broker credentials (`null` for anonymous). |
@@ -53,6 +54,34 @@ Settings for the MQTT ingestion client.
 | `RawMeasurementTopic` | Topic pattern for incoming tag range measurements (default `uwb/tags/+/measurement`). |
 | `ChipRegistrationTopic` | Topic on which chips announce themselves (default `uwb/chips/registration`). |
 | `PersistToDatabase` | If `true`, raw measurements received over MQTT are stored to the database. |
+
+### `Serial`
+Settings for USB serial ingestion from one ESP32/DW3000 gateway.
+
+| Key | Description |
+|---|---|
+| `Enabled` | If `true`, the webapp opens the configured serial port and reads JSON lines. |
+| `PortName` | Windows COM port, for example `COM3`. |
+| `BaudRate` | Must match `Serial.begin(...)` in the firmware. |
+| `ReadTimeoutMs` | Read timeout used so shutdown/reconnects stay responsive. |
+| `ReconnectDelaySeconds` | Delay before retrying when the port is unavailable. |
+| `PersistToDatabase` | If `true`, raw measurements received over serial are stored to the database. |
+
+Each serial payload should be one JSON object per line, written with `Serial.println(...)`.
+
+Registration payload:
+
+```json
+{"deviceIdentifier":"TAG-01","macAddress":"AA:BB:CC:11:22:33"}
+```
+
+Raw measurement payload:
+
+```json
+{"tagDeviceId":"TAG-01","anchorDeviceId":"ANC-01","distance":2.34,"rssi":-81}
+```
+
+`sessionId` is optional. If it is omitted, the server tries to resolve the single active session that contains the tag and anchor.
 
 ### `Positioning`
 Controls the live positioning pipeline.
