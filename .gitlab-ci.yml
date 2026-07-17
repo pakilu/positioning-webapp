@@ -1,0 +1,11 @@
+stages:
+  - deploy
+
+deploy:
+  stage: deploy
+  only:
+    - main
+  tags:
+    - shared
+  script:
+    - docker compose -p positioning up -d --remove-orphans
