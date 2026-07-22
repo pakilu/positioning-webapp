@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using App.BLL.Positioning;
 using App.DAL.EF;
 using Microsoft.EntityFrameworkCore;
@@ -9,8 +10,24 @@ using WebApp.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ??
-                       throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+// Load .env file (if present) into process environment variables so that
+// sensitive values like DB credentials can be kept out of appsettings.json
+// and out of source control.
+LoadDotEnv(Path.Combine(builder.Environment.ContentRootPath, ".env"));
+
+var rawConnectionString = builder.Configuration.GetConnectionString("DefaultConnection") ??
+                          throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+
+// Substitute ${VAR} placeholders in the connection string with environment
+// variable values (loaded from .env above, or from the real environment).
+var connectionString = Regex.Replace(rawConnectionString, @"\$\{([^}]+)\}", match =>
+{
+    var name = match.Groups[1].Value;
+    return Environment.GetEnvironmentVariable(name)
+           ?? throw new InvalidOperationException(
+               $"Environment variable '{name}' referenced by ConnectionStrings:DefaultConnection is not set. " +
+               $"Define it in WebApp/.env or in the process environment.");
+});
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     options.UseNpgsql(
@@ -105,3 +122,51 @@ app.MapHub<PositioningHub>("/hubs/positioning");
 
 
 app.Run();
+
+
+static void LoadDotEnv(string path)
+{
+    if (!File.Exists(path))
+    {
+        return;
+    }
+
+    foreach (var rawLine in File.ReadAllLines(path))
+    {
+        var line = rawLine.Trim();
+        if (line.Length == 0 || line.StartsWith('#'))
+        {
+            continue;
+        }
+
+        // Support an optional leading `export ` for shell-compatibility.
+        if (line.StartsWith("export ", StringComparison.Ordinal))
+        {
+            line = line["export ".Length..].TrimStart();
+        }
+
+        var eq = line.IndexOf('=');
+        if (eq <= 0)
+        {
+            continue;
+        }
+
+        var key = line[..eq].Trim();
+        var value = line[(eq + 1)..].Trim();
+
+        // Strip a single pair of surrounding quotes if present.
+        if (value.Length >= 2 &&
+            ((value[0] == '"' && value[^1] == '"') ||
+             (value[0] == '\'' && value[^1] == '\'')))
+        {
+            value = value[1..^1];
+        }
+
+        // Do not overwrite variables that are already set in the real
+        // environment (which allows overriding .env in production/CI).
+        if (Environment.GetEnvironmentVariable(key) is null)
+        {
+            Environment.SetEnvironmentVariable(key, value);
+        }
+    }
+}
