@@ -1,77 +1,101 @@
-@model IEnumerable<App.Domain.PositionResult>
+@model WebApp.Models.PositionResults.SessionPositionResultsViewModel
 
 @{
-    ViewData["Title"] = "Index";
+    ViewData["Title"] = Model.SelectedSessionId is null
+        ? "Position results by session"
+        : "Session position results";
 }
 
-<h1>Index</h1>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+        <h1 class="mb-1">@ViewData["Title"]</h1>
+        <div class="text-muted">Computed fixes grouped by session.</div>
+    </div>
+    <div class="d-flex gap-2">
+        @if (Model.SelectedSessionId is not null)
+        {
+            <a asp-action="Index" class="btn btn-outline-secondary">All sessions</a>
+        }
+        <a asp-action="Create" class="btn btn-primary">Create New</a>
+    </div>
+</div>
 
-<p>
-    <a asp-action="Create">Create New</a>
-</p>
-<table class="table">
-    <thead>
-        <tr>
-            <th>
-                @Html.DisplayNameFor(model => model.RecordedAt)
-            </th>
-            <th>
-                @Html.DisplayNameFor(model => model.XCoord)
-            </th>
-            <th>
-                @Html.DisplayNameFor(model => model.YCoord)
-            </th>
-            <th>
-                @Html.DisplayNameFor(model => model.ZCoord)
-            </th>
-            <th>
-                @Html.DisplayNameFor(model => model.Accuracy)
-            </th>
-            <th>
-                @Html.DisplayNameFor(model => model.CreatedAt)
-            </th>
-            <th>
-                @Html.DisplayNameFor(model => model.Session)
-            </th>
-            <th>
-                @Html.DisplayNameFor(model => model.TagChip)
-            </th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
-@foreach (var item in Model) {
-        <tr>
-            <td>
-                @Html.DisplayFor(modelItem => item.RecordedAt)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.XCoord)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.YCoord)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.ZCoord)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.Accuracy)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.CreatedAt)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.Session.Name)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.TagChip.DeviceIdentifier)
-            </td>
-            <td>
-                <a asp-action="Edit" asp-route-id="@item.Id">Edit</a> |
-                <a asp-action="Details" asp-route-id="@item.Id">Details</a> |
-                <a asp-action="Delete" asp-route-id="@item.Id">Delete</a>
-            </td>
-        </tr>
+@if (!Model.Sessions.Any())
+{
+    <div class="alert alert-info">
+        No sessions were found.
+    </div>
 }
-    </tbody>
-</table>
+
+@foreach (var group in Model.Sessions)
+{
+    var session = group.Session;
+    var latest = group.Results.FirstOrDefault();
+
+    <section class="mb-4">
+        <div class="border-bottom pb-2 mb-2">
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                <div>
+                    <h2 class="h4 mb-1">@session.Name</h2>
+                    <div class="text-muted">
+                        @session.SessionConfig.Name |
+                        @session.Status |
+                        Started @(session.StartedAt?.ToLocalTime().ToString("g") ?? "not started")
+                    </div>
+                </div>
+                <div class="text-end">
+                    <div class="fw-semibold">@group.Results.Count result@(group.Results.Count == 1 ? "" : "s")</div>
+                    @if (latest is not null)
+                    {
+                        <div class="text-muted">
+                            Latest @latest.RecordedAt.ToLocalTime().ToString("g")
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @if (!group.Results.Any())
+        {
+            <div class="text-muted mb-3">No position results have been saved for this session yet.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Recorded</th>
+                            <th>Tag</th>
+                            <th class="text-end">X</th>
+                            <th class="text-end">Y</th>
+                            <th class="text-end">Z</th>
+                            <th class="text-end">Accuracy</th>
+                            <th>Saved</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var item in group.Results)
+                    {
+                        <tr>
+                            <td>@item.RecordedAt.ToLocalTime().ToString("g")</td>
+                            <td>@item.TagChip.DeviceIdentifier</td>
+                            <td class="text-end">@item.XCoord</td>
+                            <td class="text-end">@item.YCoord</td>
+                            <td class="text-end">@(item.ZCoord?.ToString() ?? "-")</td>
+                            <td class="text-end">@(item.Accuracy?.ToString() ?? "-")</td>
+                            <td>@item.CreatedAt.ToLocalTime().ToString("g")</td>
+                            <td class="text-nowrap text-end">
+                                <a asp-action="Details" asp-route-id="@item.Id">Details</a> |
+                                <a asp-action="Edit" asp-route-id="@item.Id">Edit</a> |
+                                <a asp-action="Delete" asp-route-id="@item.Id">Delete</a>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}

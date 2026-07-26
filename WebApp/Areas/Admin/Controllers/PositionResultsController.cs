@@ -3,6 +3,7 @@ using App.Domain;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using WebApp.Models.PositionResults;
 
 namespace WebApp.Areas.Admin.Controllers
 {
@@ -16,10 +17,33 @@ namespace WebApp.Areas.Admin.Controllers
         }
 
         // GET: PositionResults
-        public async Task<IActionResult> Index()
+        public async Task<IActionResult> Index(Guid? sessionId)
         {
-            var appDbContext = _context.PositionResults.Include(p => p.Session).Include(p => p.TagChip);
-            return View(await appDbContext.ToListAsync());
+            var sessionsQuery = _context.Sessions
+                .Include(s => s.SessionConfig)
+                .Include(s => s.PositionResults.OrderByDescending(p => p.RecordedAt))
+                    .ThenInclude(p => p.TagChip)
+                .OrderByDescending(s => s.StartedAt ?? s.CreatedAt)
+                .AsQueryable();
+
+            if (sessionId is Guid id)
+            {
+                sessionsQuery = sessionsQuery.Where(s => s.Id == id);
+            }
+
+            var model = new SessionPositionResultsViewModel
+            {
+                SelectedSessionId = sessionId,
+                Sessions = await sessionsQuery
+                    .Select(s => new SessionPositionResultsGroup
+                    {
+                        Session = s,
+                        Results = s.PositionResults.ToList()
+                    })
+                    .ToListAsync()
+            };
+
+            return View(model);
         }
 
         // GET: PositionResults/Details/5
