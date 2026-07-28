@@ -82,6 +82,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 
 // The orchestrator itself.
 builder.Services.AddSingleton<IPositioningPipeline, PositioningPipeline>();
+builder.Services.AddScoped<IAnchorRoutingService, AnchorRoutingService>();
 builder.Services.AddSingleton<IngestProcessor>();
 // ---------------------------------------------------------------------------
 
