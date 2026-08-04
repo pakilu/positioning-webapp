@@ -13,5 +13,7 @@ public class SessionPositionResultsGroup
 {
     public Session Session { get; set; } = default!;
 
-    public IReadOnlyList<PositionResult> Results { get; set; } = [];
+    public int ResultCount { get; set; }
+
+    public DateTime? LatestRecordedAt { get; set; }
 }

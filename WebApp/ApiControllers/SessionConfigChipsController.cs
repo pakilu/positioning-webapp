@@ -84,6 +84,45 @@ namespace WebApp.ApiControllers
             return CreatedAtAction("GetSessionConfigChip", new { id = sessionConfigChip.Id }, sessionConfigChip);
         }
 
+        public class UpdateCoordsDto
+        {
+            public decimal? X { get; set; }
+            public decimal? Y { get; set; }
+            public decimal? Z { get; set; }
+        }
+
+        // PATCH: api/SessionConfigChips/{id}/coords
+        // Lightweight endpoint used by the live map to persist a dragged
+        // anchor's new position without having to round-trip the whole entity.
+        [HttpPatch("{id}/coords")]
+        public async Task<IActionResult> PatchCoords(Guid id, [FromBody] UpdateCoordsDto dto)
+        {
+            if (dto == null)
+            {
+                return BadRequest();
+            }
+
+            // The DbContext is configured with NoTrackingWithIdentityResolution
+            // (see Program.cs), so FindAsync/regular queries return untracked
+            // entities and property changes would be silently ignored on
+            // SaveChangesAsync. Force a tracking query so EF picks up the edits.
+            var chip = await _context.SessionConfigChips
+                .AsTracking()
+                .FirstOrDefaultAsync(c => c.Id == id);
+            if (chip == null)
+            {
+                return NotFound();
+            }
+
+            if (dto.X.HasValue) chip.XCoord = dto.X.Value;
+            if (dto.Y.HasValue) chip.YCoord = dto.Y.Value;
+            if (dto.Z.HasValue) chip.ZCoord = dto.Z.Value;
+            chip.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
         // DELETE: api/SessionConfigChips/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteSessionConfigChip(Guid id)

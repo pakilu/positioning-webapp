@@ -2,6 +2,7 @@
 
 @{
     ViewData["Title"] = "Edit room layout";
+    var hasPlan = !string.IsNullOrWhiteSpace(Model.FloorPlanImagePath);
 }
 
 <h1>Edit room layout</h1>
@@ -9,10 +10,11 @@
 <h4>Room layout</h4>
 <hr />
 <div class="row">
-    <div class="col-md-4">
-        <form asp-action="Edit">
+    <div class="col-md-6">
+        <form asp-action="Edit" enctype="multipart/form-data">
             <div asp-validation-summary="ModelOnly" class="text-danger"></div>
             <input type="hidden" asp-for="Id" />
+
             <div class="form-group">
                 <label asp-for="Name" class="control-label"></label>
                 <input asp-for="Name" class="form-control" />
@@ -28,6 +30,102 @@
                 <input asp-for="PlannedDurationSeconds" class="form-control" />
                 <span asp-validation-for="PlannedDurationSeconds" class="text-danger"></span>
             </div>
+
+            <hr />
+            <h5>Floor plan overlay <small class="text-muted">(optional)</small></h5>
+            <p class="text-muted small mb-3">
+                Upload a floor plan image (PNG / JPG / SVG) and describe the real-world rectangle
+                it covers. The image will be drawn behind anchors and tags on the live view,
+                using the same X/Y meter coordinates.
+            </p>
+
+            @if (hasPlan)
+            {
+                <div class="mb-3">
+                    <label class="control-label">Current image</label>
+                    <div class="border rounded p-2 bg-light" style="max-width: 320px;">
+                        <img src="@Model.FloorPlanImagePath" alt="Current floor plan"
+                             style="max-width: 100%; height: auto;" />
+                    </div>
+                    <small class="text-muted d-block mt-1"><code>@Model.FloorPlanImagePath</code></small>
+                </div>
+            }
+
+            <div class="form-group">
+                <label for="floorPlanFile" class="control-label">
+                    @(hasPlan ? "Replace image (leave empty to keep current)" : "Upload image")
+                </label>
+                <input type="file" name="floorPlanFile" id="floorPlanFile"
+                       accept=".png,.jpg,.jpeg,.svg,.webp,.gif" class="form-control" />
+            </div>
+
+            <div class="form-group">
+                <label asp-for="FloorPlanImagePath" class="control-label">
+                    ...or web path (advanced, e.g. <code>/maps/ico_3.korrus-1.png</code>)
+                </label>
+                <input asp-for="FloorPlanImagePath" class="form-control" />
+                <span asp-validation-for="FloorPlanImagePath" class="text-danger"></span>
+            </div>
+
+            <div class="row">
+                <div class="col-6">
+                    <div class="form-group">
+                        <label asp-for="FloorPlanOriginXMeters" class="control-label">
+                            Origin X (m) — world X at image LEFT edge
+                        </label>
+                        <input asp-for="FloorPlanOriginXMeters" type="number" step="any" class="form-control" />
+                        <span asp-validation-for="FloorPlanOriginXMeters" class="text-danger"></span>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="form-group">
+                        <label asp-for="FloorPlanOriginYMeters" class="control-label">
+                            Origin Y (m) — world Y at image BOTTOM edge
+                        </label>
+                        <input asp-for="FloorPlanOriginYMeters" type="number" step="any" class="form-control" />
+                        <span asp-validation-for="FloorPlanOriginYMeters" class="text-danger"></span>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="form-group">
+                        <label asp-for="FloorPlanWidthMeters" class="control-label">Width (m)</label>
+                        <input asp-for="FloorPlanWidthMeters" type="number" step="any" class="form-control" />
+                        <span asp-validation-for="FloorPlanWidthMeters" class="text-danger"></span>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="form-group">
+                        <label asp-for="FloorPlanHeightMeters" class="control-label">Height (m)</label>
+                        <input asp-for="FloorPlanHeightMeters" type="number" step="any" class="form-control" />
+                        <span asp-validation-for="FloorPlanHeightMeters" class="text-danger"></span>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="form-group">
+                        <label asp-for="FloorPlanRotationDeg" class="control-label">Rotation (deg, CW)</label>
+                        <input asp-for="FloorPlanRotationDeg" type="number" step="any" class="form-control" />
+                        <span asp-validation-for="FloorPlanRotationDeg" class="text-danger"></span>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="form-group">
+                        <label asp-for="FloorPlanOpacity" class="control-label">Opacity (0..1)</label>
+                        <input asp-for="FloorPlanOpacity" type="number" step="0.05" min="0" max="1" class="form-control" />
+                        <span asp-validation-for="FloorPlanOpacity" class="text-danger"></span>
+                    </div>
+                </div>
+            </div>
+
+            @if (hasPlan)
+            {
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" name="removeFloorPlan" value="true" id="removeFloorPlan" />
+                    <label class="form-check-label" for="removeFloorPlan">
+                        Remove floor plan overlay (clears image + calibration)
+                    </label>
+                </div>
+            }
+
             <div class="form-group mt-3">
                 <input type="submit" value="Save" class="btn btn-primary" />
                 <a asp-action="Index" class="btn btn-secondary">Cancel</a>

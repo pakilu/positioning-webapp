@@ -17,33 +17,48 @@ namespace WebApp.Areas.Admin.Controllers
         }
 
         // GET: PositionResults
-        public async Task<IActionResult> Index(Guid? sessionId)
+        public async Task<IActionResult> Index()
         {
-            var sessionsQuery = _context.Sessions
-                .Include(s => s.SessionConfig)
-                .Include(s => s.PositionResults.OrderByDescending(p => p.RecordedAt))
-                    .ThenInclude(p => p.TagChip)
-                .OrderByDescending(s => s.StartedAt ?? s.CreatedAt)
-                .AsQueryable();
-
-            if (sessionId is Guid id)
-            {
-                sessionsQuery = sessionsQuery.Where(s => s.Id == id);
-            }
-
             var model = new SessionPositionResultsViewModel
             {
-                SelectedSessionId = sessionId,
-                Sessions = await sessionsQuery
+                Sessions = await _context.Sessions
+                    .Include(s => s.SessionConfig)
+                    .OrderByDescending(s => s.StartedAt ?? s.CreatedAt)
                     .Select(s => new SessionPositionResultsGroup
                     {
                         Session = s,
-                        Results = s.PositionResults.ToList()
+                        ResultCount = s.PositionResults.Count(),
+                        LatestRecordedAt = s.PositionResults
+                            .OrderByDescending(p => p.RecordedAt)
+                            .Select(p => (DateTime?)p.RecordedAt)
+                            .FirstOrDefault()
                     })
                     .ToListAsync()
             };
 
             return View(model);
+        }
+
+        // GET: PositionResults/Session/5
+        public async Task<IActionResult> Session(Guid? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var session = await _context.Sessions
+                .Include(s => s.SessionConfig)
+                .Include(s => s.PositionResults.OrderByDescending(p => p.RecordedAt))
+                    .ThenInclude(p => p.TagChip)
+                .FirstOrDefaultAsync(s => s.Id == id);
+
+            if (session == null)
+            {
+                return NotFound();
+            }
+
+            return View(session);
         }
 
         // GET: PositionResults/Details/5
