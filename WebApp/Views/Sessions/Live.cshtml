@@ -12,7 +12,7 @@
         {
             id = c.Id,
             chipId = c.ChipId,
-            name = c.Chip?.Name ?? c.Chip?.DeviceIdentifier ?? c.ChipId.ToString(),
+            name =  c.Chip?.DeviceIdentifier ?? c.Chip?.Name ?? c.ChipId.ToString(),
             x = c.XCoord,
             y = c.YCoord,
             z = c.ZCoord ?? 0
@@ -167,8 +167,8 @@
         const marker = document.getElementById("tag-marker");
         const zoomLabel = document.getElementById("zoom-label");
         const latestFix = document.getElementById("latest-fix");
-        const tagNames = new Map(TAGS.map(t => [String(t.chipId).toLowerCase(), t.name]));
-        const tagDeviceIds = new Map(TAGS.map(t => [String(t.chipId).toLowerCase(), t.deviceIdentifier]));
+        const tagNames = new Map(TAGS.map(t => [String(t.chipId).toLowerCase(), t.deviceIdentifier]));
+        const tagDeviceIds = new Map(TAGS.map(t => [String(t.chipId).toLowerCase(), t.name]));
         const anchorEls = new Map(); // chipId (lower) -> DOM element
 
         const bounds = (() => {
