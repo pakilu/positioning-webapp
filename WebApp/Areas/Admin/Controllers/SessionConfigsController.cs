@@ -93,7 +93,7 @@ namespace WebApp.Areas.Admin.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(
             Guid id,
-            [Bind("Id,Name,Description,PlannedDurationSeconds,FloorPlanImagePath,FloorPlanOriginXMeters,FloorPlanOriginYMeters,FloorPlanWidthMeters,FloorPlanHeightMeters,FloorPlanRotationDeg,FloorPlanOpacity")] SessionConfig sessionConfig,
+            [Bind("Id,Name,Description,PlannedDurationSeconds,FloorPlanImagePath,FloorPlanOriginXMeters,FloorPlanOriginYMeters,FloorPlanWidthMeters,FloorPlanHeightMeters,FloorPlanScale,FloorPlanRotationDeg,FloorPlanOpacity")] SessionConfig sessionConfig,
             IFormFile? floorPlanFile,
             bool removeFloorPlan = false)
         {
@@ -127,6 +127,7 @@ namespace WebApp.Areas.Admin.Controllers
                         existing.FloorPlanOriginYMeters = null;
                         existing.FloorPlanWidthMeters = null;
                         existing.FloorPlanHeightMeters = null;
+                        existing.FloorPlanScale = null;
                         existing.FloorPlanRotationDeg = null;
                         existing.FloorPlanOpacity = null;
                     }
@@ -154,6 +155,7 @@ namespace WebApp.Areas.Admin.Controllers
                         existing.FloorPlanOriginYMeters = sessionConfig.FloorPlanOriginYMeters;
                         existing.FloorPlanWidthMeters   = sessionConfig.FloorPlanWidthMeters;
                         existing.FloorPlanHeightMeters  = sessionConfig.FloorPlanHeightMeters;
+                        existing.FloorPlanScale         = sessionConfig.FloorPlanScale;
                         existing.FloorPlanRotationDeg   = sessionConfig.FloorPlanRotationDeg;
                         existing.FloorPlanOpacity       = sessionConfig.FloorPlanOpacity;
                     }

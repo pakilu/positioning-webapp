@@ -33,6 +33,16 @@ public class SessionConfig
     /// <summary>Real-world height (m) that the image spans vertically.</summary>
     public double? FloorPlanHeightMeters { get; set; }
 
+    /// <summary>
+    /// Optional drawing scale multiplier. The effective real-world extent of
+    /// the floor plan is <c>FloorPlanWidthMeters * FloorPlanScale</c> by
+    /// <c>FloorPlanHeightMeters * FloorPlanScale</c>. Use e.g. 100 for a 1:100
+    /// drawing where the width/height fields hold the paper / drawing size
+    /// rather than the real-world size. Null or 1 means the width/height are
+    /// already in real-world units (no scaling).
+    /// </summary>
+    public double? FloorPlanScale { get; set; }
+
     /// <summary>Clockwise rotation of the plan about its center, in degrees. Default 0.</summary>
     public double? FloorPlanRotationDeg { get; set; }
 

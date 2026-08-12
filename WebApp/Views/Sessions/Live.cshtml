@@ -28,13 +28,20 @@
         && sc.FloorPlanWidthMeters.HasValue  && sc.FloorPlanWidthMeters  > 0
         && sc.FloorPlanHeightMeters.HasValue && sc.FloorPlanHeightMeters > 0)
     {
+        // Apply the optional drawing scale ("1 : N") so downstream JS always
+        // works in real-world units. A null / non-positive scale means no
+        // scaling. Origin is treated as already in world units.
+        var scale = sc.FloorPlanScale.HasValue && sc.FloorPlanScale.Value > 0
+            ? sc.FloorPlanScale.Value
+            : 1.0;
         floorPlan = new
         {
             url = sc.FloorPlanImagePath,
             ox = sc.FloorPlanOriginXMeters!.Value,
             oy = sc.FloorPlanOriginYMeters!.Value,
-            w  = sc.FloorPlanWidthMeters!.Value,
-            h  = sc.FloorPlanHeightMeters!.Value,
+            w  = sc.FloorPlanWidthMeters!.Value  * scale,
+            h  = sc.FloorPlanHeightMeters!.Value * scale,
+            scale = scale,
             rot = sc.FloorPlanRotationDeg ?? 0,
             opacity = sc.FloorPlanOpacity ?? 0.7
         };

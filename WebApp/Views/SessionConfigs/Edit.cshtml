@@ -100,6 +100,23 @@
                         <span asp-validation-for="FloorPlanHeightMeters" class="text-danger"></span>
                     </div>
                 </div>
+                <div class="col-12">
+                    <div class="form-group">
+                        <label asp-for="FloorPlanScale" class="control-label">
+                            Drawing scale (1 : N)
+                        </label>
+                        <input asp-for="FloorPlanScale" type="number" step="any" min="0" class="form-control"
+                               placeholder="1 (leave empty if width/height are already real-world)" />
+                        <small class="form-text text-muted">
+                            If the image is a scaled drawing, enter the scale factor <em>N</em>
+                            (e.g. <code>100</code> for a 1:100 drawing). The real-world extent
+                            of the plan is <code>Width × N</code> by <code>Height × N</code>.
+                            Leave empty or set to <code>1</code> when Width/Height are already
+                            in real-world units.
+                        </small>
+                        <span asp-validation-for="FloorPlanScale" class="text-danger"></span>
+                    </div>
+                </div>
                 <div class="col-6">
                     <div class="form-group">
                         <label asp-for="FloorPlanRotationDeg" class="control-label">Rotation (deg, CW)</label>
