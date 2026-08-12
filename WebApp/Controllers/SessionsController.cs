@@ -1,0 +1,327 @@
+using App.DAL.EF;
+using App.Domain;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.EntityFrameworkCore;
+using WebApp.Services;
+
+namespace WebApp.Controllers
+{
+    public class SessionsController : Controller
+    {
+        private readonly AppDbContext _context;
+        private readonly IAnchorListPublisher _anchorListPublisher;
+        private readonly ILogger<SessionsController> _logger;
+
+        public SessionsController(
+            AppDbContext context,
+            IAnchorListPublisher anchorListPublisher,
+            ILogger<SessionsController> logger)
+        {
+            _context = context;
+            _anchorListPublisher = anchorListPublisher;
+            _logger = logger;
+        }
+
+        private async Task TryPublishAnchorsAsync(Guid sessionId, bool clear)
+        {
+            try
+            {
+                await _anchorListPublisher.PublishForSessionAsync(sessionId, clear);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Failed to publish anchor list for session {SessionId} (clear={Clear})",
+                    sessionId, clear);
+            }
+        }
+
+        // GET: Sessions
+        public async Task<IActionResult> Index()
+        {
+            var appDbContext = _context.Sessions.Include(s => s.SessionConfig);
+            return View(await appDbContext.ToListAsync());
+        }
+
+        // GET: Sessions/Details/5
+        public async Task<IActionResult> Details(Guid? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var session = await _context.Sessions
+                .Include(s => s.SessionConfig)
+                .FirstOrDefaultAsync(m => m.Id == id);
+            if (session == null)
+            {
+                return NotFound();
+            }
+
+            return View(session);
+        }
+
+        // GET: Sessions/Create
+        public IActionResult Create(Guid? sessionConfigId = null)
+        {
+            ViewData["SessionConfigId"] = new SelectList(_context.SessionConfigs, "Id", "Name", sessionConfigId);
+            var model = new App.Domain.Session();
+            if (sessionConfigId.HasValue) model.SessionConfigId = sessionConfigId.Value;
+            return View(model);
+        }
+
+        // POST: Sessions/Create
+        // To protect from overposting attacks, enable the specific properties you want to bind to.
+        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Create([Bind("SessionConfigId,Name")] Session session)
+        {
+            ModelState.Remove(nameof(Session.SessionConfig));
+            if (ModelState.IsValid)
+            {
+                var conflict = await FindActiveSessionForConfigAsync(session.SessionConfigId);
+                if (conflict is not null)
+                {
+                    ModelState.AddModelError(nameof(Session.SessionConfigId),
+                        $"Another session ('{conflict.Name}') is already active for this room layout. Finish or cancel it before starting a new one.");
+                }
+                else
+                {
+                    session.Id = Guid.NewGuid();
+                    StartSession(session);
+                    _context.Add(session);
+                    await _context.SaveChangesAsync();
+                    await TryPublishAnchorsAsync(session.Id, clear: false);
+                    return RedirectToAction(nameof(Live), new { id = session.Id });
+                }
+            }
+            ViewData["SessionConfigId"] = new SelectList(_context.SessionConfigs, "Id", "Name", session.SessionConfigId);
+            return View(session);
+        }
+
+        // GET: Sessions/Live/5
+        public async Task<IActionResult> Live(Guid? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var session = await _context.Sessions
+                .Include(s => s.SessionConfig)
+                    .ThenInclude(sc => sc.SessionConfigChips)
+                        .ThenInclude(scc => scc.Chip)
+                .FirstOrDefaultAsync(m => m.Id == id);
+            if (session == null)
+            {
+                return NotFound();
+            }
+
+            return View(session);
+        }
+
+        // GET: Sessions/Edit/5
+        public async Task<IActionResult> Edit(Guid? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var session = await _context.Sessions.FindAsync(id);
+            if (session == null)
+            {
+                return NotFound();
+            }
+            ViewData["SessionConfigId"] = new SelectList(_context.SessionConfigs, "Id", "Name", session.SessionConfigId);
+            return View(session);
+        }
+
+        // POST: Sessions/Edit/5
+        // To protect from overposting attacks, enable the specific properties you want to bind to.
+        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(Guid id, [Bind("Id,SessionConfigId,Name")] Session session)
+        {
+            if (id != session.Id)
+            {
+                return NotFound();
+            }
+
+            ModelState.Remove(nameof(Session.SessionConfig));
+            if (ModelState.IsValid)
+            {
+                try
+                {
+                    var existing = await GetTrackedSessionAsync(id);
+                    if (existing == null)
+                    {
+                        return NotFound();
+                    }
+
+                    existing.SessionConfigId = session.SessionConfigId;
+                    existing.Name = session.Name;
+                    existing.UpdatedAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    if (!SessionExists(session.Id))
+                    {
+                        return NotFound();
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+                return RedirectToAction(nameof(Index));
+            }
+            ViewData["SessionConfigId"] = new SelectList(_context.SessionConfigs, "Id", "Name", session.SessionConfigId);
+            return View(session);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Activate(Guid id)
+        {
+            var session = await GetTrackedSessionAsync(id);
+            if (session == null)
+            {
+                return NotFound();
+            }
+
+            var conflict = await FindActiveSessionForConfigAsync(session.SessionConfigId, excludeId: id);
+            if (conflict is not null)
+            {
+                TempData["Error"] =
+                    $"Cannot activate this session: another session ('{conflict.Name}') is already active for the same room layout. " +
+                    "Finish or cancel it first.";
+                return RedirectToAction(nameof(Live), new { id });
+            }
+
+            StartSession(session);
+            await _context.SaveChangesAsync();
+            await TryPublishAnchorsAsync(id, clear: false);
+            return RedirectToAction(nameof(Live), new { id });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Finish(Guid id)
+        {
+            var session = await GetTrackedSessionAsync(id);
+            if (session == null)
+            {
+                return NotFound();
+            }
+
+            EndSession(session, ESessionStatus.Finished);
+            await _context.SaveChangesAsync();
+            await TryPublishAnchorsAsync(id, clear: true);
+            return RedirectToAction(nameof(Live), new { id });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Cancel(Guid id)
+        {
+            var session = await GetTrackedSessionAsync(id);
+            if (session == null)
+            {
+                return NotFound();
+            }
+
+            EndSession(session, ESessionStatus.Cancelled);
+            await _context.SaveChangesAsync();
+            await TryPublishAnchorsAsync(id, clear: true);
+            return RedirectToAction(nameof(Live), new { id });
+        }
+
+        // GET: Sessions/Delete/5
+        public async Task<IActionResult> Delete(Guid? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var session = await _context.Sessions
+                .Include(s => s.SessionConfig)
+                .FirstOrDefaultAsync(m => m.Id == id);
+            if (session == null)
+            {
+                return NotFound();
+            }
+
+            return View(session);
+        }
+
+        // POST: Sessions/Delete/5
+        [HttpPost, ActionName("Delete")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteConfirmed(Guid id)
+        {
+            var session = await _context.Sessions.FindAsync(id);
+            if (session != null)
+            {
+                _context.Sessions.Remove(session);
+            }
+
+            await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(Index));
+        }
+
+        private bool SessionExists(Guid id)
+        {
+            return _context.Sessions.Any(e => e.Id == id);
+        }
+
+        private Task<Session?> GetTrackedSessionAsync(Guid id)
+        {
+            return _context.Sessions
+                .AsTracking()
+                .FirstOrDefaultAsync(s => s.Id == id);
+        }
+
+        /// <summary>
+        /// Finds an active session bound to <paramref name="sessionConfigId"/>, optionally
+        /// ignoring the session with id <paramref name="excludeId"/> (used when re-activating
+        /// a session so it does not count itself as a conflict).
+        /// </summary>
+        private Task<Session?> FindActiveSessionForConfigAsync(Guid sessionConfigId, Guid? excludeId = null)
+        {
+            return _context.Sessions
+                .Where(s => s.Status == ESessionStatus.Active
+                            && s.SessionConfigId == sessionConfigId
+                            && (excludeId == null || s.Id != excludeId))
+                .FirstOrDefaultAsync();
+        }
+
+        private static void StartSession(Session session)
+        {
+            var now = DateTime.UtcNow;
+            session.Status = ESessionStatus.Active;
+            session.StartedAt ??= now;
+            session.EndedAt = null;
+            if (session.CreatedAt == default)
+            {
+                session.CreatedAt = now;
+            }
+            session.UpdatedAt = now;
+        }
+
+        private static void EndSession(Session session, ESessionStatus status)
+        {
+            var now = DateTime.UtcNow;
+            session.Status = status;
+            session.StartedAt ??= now;
+            session.EndedAt = now;
+            session.UpdatedAt = now;
+        }
+    }
+}

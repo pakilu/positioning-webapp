@@ -1,40 +1,59 @@
 @model IEnumerable<App.Domain.Chip>
+@using App.Domain
 
 @{
     ViewData["Title"] = "Chips";
+    var unassignedOnly = (bool)(ViewData["UnassignedOnly"] ?? false);
 }
 
 <h1>Chips</h1>
 
-<p>
-    <a asp-action="Create">Register chip</a>
-</p>
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <a asp-action="Create" class="btn btn-primary btn-sm">+ Register chip</a>
+    <form method="get" class="d-flex gap-2 align-items-center">
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="unassignedOnly" value="true"
+                   id="unassignedOnly" @(unassignedOnly ? "checked" : "") onchange="this.form.submit()" />
+            <label class="form-check-label" for="unassignedOnly">Show unassigned only</label>
+        </div>
+    </form>
+</div>
+
 <table class="table">
     <thead>
         <tr>
-            <th>
-                @Html.DisplayNameFor(model => model.Name)
-            </th>
-            <th>
-                MAC address / device ID
-            </th>
-            <th>
-                @Html.DisplayNameFor(model => model.Description)
-            </th>
+            <th>@Html.DisplayNameFor(model => model.Name)</th>
+            <th>MAC address / device ID</th>
+            <th>@Html.DisplayNameFor(model => model.Description)</th>
+            <th>Placed in</th>
             <th></th>
         </tr>
     </thead>
     <tbody>
-@foreach (var item in Model) {
+    @foreach (var item in Model)
+    {
         <tr>
+            <td>@Html.DisplayFor(modelItem => item.Name)</td>
+            <td>@Html.DisplayFor(modelItem => item.DeviceIdentifier)</td>
+            <td>@Html.DisplayFor(modelItem => item.Description)</td>
             <td>
-                @Html.DisplayFor(modelItem => item.Name)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.DeviceIdentifier)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.Description)
+                @if (item.SessionConfigChips.Count == 0)
+                {
+                    <span class="text-muted">— unassigned —</span>
+                }
+                else
+                {
+                    @foreach (var scc in item.SessionConfigChips.OrderBy(s => s.SessionConfig?.Name))
+                    {
+                        var role = scc.Role == EChipRole.Anchor ? "anchor" : "tag";
+                        <div>
+                            <a asp-controller="SessionConfigs" asp-action="Details" asp-route-id="@scc.SessionConfigId">
+                                @scc.SessionConfig?.Name
+                            </a>
+                            <span class="text-muted">(@role)</span>
+                        </div>
+                    }
+                }
             </td>
             <td>
                 <a asp-action="Edit" asp-route-id="@item.Id">Edit</a> |
@@ -42,6 +61,6 @@
                 <a asp-action="Delete" asp-route-id="@item.Id">Delete</a>
             </td>
         </tr>
-}
+    }
     </tbody>
 </table>

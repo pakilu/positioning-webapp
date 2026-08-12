@@ -1,0 +1,69 @@
+@model WebApp.Models.PositionPlaneViewModel
+@using System.Text.Json
+
+@{
+    var anchorsJson = JsonSerializer.Serialize(Model.Anchors.Select(a => new
+    {
+        id = a.Id,
+        chipId = a.ChipId,
+        name = a.Name,
+        x = a.X,
+        y = a.Y,
+        z = a.Z,
+    }));
+    var tagsJson = JsonSerializer.Serialize(Model.Tags.Select(t => new
+    {
+        chipId = t.ChipId,
+        deviceIdentifier = t.DeviceIdentifier,
+        name = t.Name,
+    }));
+    var floorPlanJson = Model.FloorPlan is null
+        ? "null"
+        : JsonSerializer.Serialize(new
+        {
+            url = Model.FloorPlan.Url,
+            ox = Model.FloorPlan.Ox,
+            oy = Model.FloorPlan.Oy,
+            w  = Model.FloorPlan.W  * (Model.FloorPlan.Scale > 0 ? Model.FloorPlan.Scale : 1.0),
+            h  = Model.FloorPlan.H  * (Model.FloorPlan.Scale > 0 ? Model.FloorPlan.Scale : 1.0),
+            rot = Model.FloorPlan.Rot,
+            opacity = Model.FloorPlan.Opacity,
+        });
+    var rootId = Model.DomId;
+}
+
+<div id="@rootId" class="position-plane-root" data-mode="@Model.Mode">
+    <div class="plane-toolbar">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-plane-zoom-in title="Zoom in">+</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-plane-zoom-out title="Zoom out">&minus;</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-plane-zoom-reset title="Reset view">Reset</button>
+        <span class="plane-zoom-label">100%</span>
+    </div>
+    <div class="position-plane">
+        <div class="plane-content">
+            <img class="floor-plan" hidden alt="Floor plan" />
+            <div class="axis-label axis-x">X</div>
+            <div class="axis-label axis-y">Y</div>
+            <div class="tag-marker" hidden>
+                <span></span>
+                <strong></strong>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        const root = document.getElementById(@Html.Raw(JsonSerializer.Serialize(rootId)));
+        if (!root) return;
+        const plane = PositionPlane.mount(root, {
+            anchors:   @Html.Raw(anchorsJson),
+            tags:      @Html.Raw(tagsJson),
+            floorPlan: @Html.Raw(floorPlanJson),
+            mode:      @Html.Raw(JsonSerializer.Serialize(Model.Mode)),
+        });
+        // Expose so the hosting view can call updateTagMarker / setSelectedAnchors.
+        window.PositionPlanes = window.PositionPlanes || {};
+        window.PositionPlanes[root.id] = plane;
+    })();
+</script>

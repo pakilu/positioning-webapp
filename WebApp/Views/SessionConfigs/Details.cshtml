@@ -1,48 +1,434 @@
-@model App.Domain.SessionConfig
+@model WebApp.Models.RoomDetailViewModel
+@using App.Domain
 
 @{
-    ViewData["Title"] = "Details";
+    ViewData["Title"] = $"Room: {Model.Room.Name}";
+    var room = Model.Room;
+    var hasFloorPlan = !string.IsNullOrWhiteSpace(room.FloorPlanImagePath);
+    var antiForgery = Html.AntiForgeryToken().ToString();
 }
 
-<h1>Details</h1>
+@section Styles {
+    <link rel="stylesheet" href="~/css/position-plane.css" asp-append-version="true" />
+    <style>
+        .room-header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 1rem; margin-bottom: .5rem; }
+        .room-meta { color: var(--rose-muted); font-size: .95rem; }
+        .room-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 1.25rem; align-items: start; }
+        .room-side-panel { display: grid; gap: 1rem; }
+        .room-list { list-style: none; padding: 0; margin: 0; }
+        .room-list li { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding: .4rem .5rem; border-radius: 6px; }
+        .room-list li + li { border-top: 1px solid var(--rose-100); }
+        .room-list .role-dot { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; margin-right: .4rem; vertical-align: middle; }
+        .room-list .role-anchor { background: #245c8a; }
+        .room-list .role-tag { background: #24854a; }
+        .room-list .no-coords { color: var(--rose-muted); font-size: .85rem; }
+        .floor-plan-hint { color: var(--rose-muted); font-size: .85rem; margin-top: .35rem; }
+        .sessions-mini-list { list-style: none; padding: 0; margin: 0; }
+        .sessions-mini-list li { padding: .4rem .5rem; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+        .sessions-mini-list li + li { border-top: 1px solid var(--rose-100); }
+        @@media (max-width: 900px) { .room-grid { grid-template-columns: 1fr; } }
+    </style>
+}
 
-<div>
-    <h4>SessionConfig</h4>
-    <hr />
-    <dl class="row">
-        <dt class = "col-sm-2">
-            @Html.DisplayNameFor(model => model.Name)
-        </dt>
-        <dd class = "col-sm-10">
-            @Html.DisplayFor(model => model.Name)
-        </dd>
-        <dt class = "col-sm-2">
-            @Html.DisplayNameFor(model => model.Description)
-        </dt>
-        <dd class = "col-sm-10">
-            @Html.DisplayFor(model => model.Description)
-        </dd>
-        <dt class = "col-sm-2">
-            @Html.DisplayNameFor(model => model.PlannedDurationSeconds)
-        </dt>
-        <dd class = "col-sm-10">
-            @Html.DisplayFor(model => model.PlannedDurationSeconds)
-        </dd>
-        <dt class = "col-sm-2">
-            @Html.DisplayNameFor(model => model.CreatedAt)
-        </dt>
-        <dd class = "col-sm-10">
-            @Html.DisplayFor(model => model.CreatedAt)
-        </dd>
-        <dt class = "col-sm-2">
-            @Html.DisplayNameFor(model => model.UpdatedAt)
-        </dt>
-        <dd class = "col-sm-10">
-            @Html.DisplayFor(model => model.UpdatedAt)
-        </dd>
-    </dl>
+<div class="room-header">
+    <div>
+        <h1 class="mb-1">@room.Name</h1>
+        @if (!string.IsNullOrWhiteSpace(room.Description))
+        {
+            <div class="room-meta">@room.Description</div>
+        }
+        <div class="room-meta">
+            @if (room.PlannedDurationSeconds.HasValue)
+            {
+                <span>Planned duration: <strong>@room.PlannedDurationSeconds s</strong></span> <text>·</text>
+            }
+            <span>Floor plan: <strong>@(hasFloorPlan ? "configured" : "not configured")</strong></span>
+        </div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a asp-action="Edit" asp-route-id="@room.Id" class="btn btn-outline-primary btn-sm">Edit room</a>
+        <a asp-action="Index" class="btn btn-secondary btn-sm">Back to rooms</a>
+    </div>
 </div>
-<div>
-    <a asp-action="Edit" asp-route-id="@Model?.Id">Edit</a> |
-    <a asp-action="Index">Back to List</a>
+
+<div class="room-grid">
+    <section aria-label="Room layout">
+        <h4>Layout</h4>
+        <p class="room-meta">
+            Drag anchors on the map to reposition them. New positions save automatically.
+            Trilateration needs at least three anchors with X and Y coordinates.
+        </p>
+        <script src="~/js/position-plane.js" asp-append-version="true"></script>
+        @await Html.PartialAsync("_PositionPlane", Model.Plane)
+        @if (!hasFloorPlan)
+        {
+            <div class="floor-plan-hint">
+                Tip: upload a floor plan via <a asp-action="Edit" asp-route-id="@room.Id">Edit room</a> to add visual context underneath the anchors.
+            </div>
+        }
+    </section>
+
+    <aside class="room-side-panel">
+        <section class="card p-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="mb-0">Anchors (@Model.Anchors.Count)</h5>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#add-anchor-modal">
+                    + Add anchor
+                </button>
+            </div>
+            @if (Model.Anchors.Count == 0)
+            {
+                <div class="room-meta">No anchors yet. Add at least three with X/Y to enable trilateration.</div>
+            }
+            else
+            {
+                <ul class="room-list">
+                    @foreach (var a in Model.Anchors)
+                    {
+                        <li>
+                            <div>
+                                <span class="role-dot role-anchor"></span>
+                                <strong>@(a.Chip?.Name ?? a.Chip?.DeviceIdentifier ?? a.ChipId.ToString())</strong>
+                                @if (a.XCoord != null && a.YCoord != null)
+                                {
+                                    <span class="room-meta">(@a.XCoord, @a.YCoord)</span>
+                                }
+                                else
+                                {
+                                    <span class="no-coords">no coordinates</span>
+                                }
+                            </div>
+                            <div class="d-flex gap-1">
+                                <a asp-controller="SessionConfigChips" asp-action="Edit" asp-route-id="@a.Id"
+                                   class="btn btn-sm btn-outline-secondary">Edit</a>
+                                <a asp-controller="SessionConfigChips" asp-action="Delete" asp-route-id="@a.Id"
+                                   class="btn btn-sm btn-outline-danger">Remove</a>
+                            </div>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+
+        <section class="card p-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="mb-0">Tags (@Model.Tags.Count)</h5>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#add-tag-modal">
+                    + Add tag
+                </button>
+            </div>
+            @if (Model.Tags.Count == 0)
+            {
+                <div class="room-meta">No tags yet. Tags are positioned live during a session.</div>
+            }
+            else
+            {
+                <ul class="room-list">
+                    @foreach (var t in Model.Tags)
+                    {
+                        <li>
+                            <div>
+                                <span class="role-dot role-tag"></span>
+                                <strong>@(t.Chip?.Name ?? t.Chip?.DeviceIdentifier ?? t.ChipId.ToString())</strong>
+                                @if (!string.IsNullOrWhiteSpace(t.Chip?.DeviceIdentifier))
+                                {
+                                    <span class="room-meta">(@t.Chip.DeviceIdentifier)</span>
+                                }
+                            </div>
+                            <div class="d-flex gap-1">
+                                <a asp-controller="SessionConfigChips" asp-action="Edit" asp-route-id="@t.Id"
+                                   class="btn btn-sm btn-outline-secondary">Edit</a>
+                                <a asp-controller="SessionConfigChips" asp-action="Delete" asp-route-id="@t.Id"
+                                   class="btn btn-sm btn-outline-danger">Remove</a>
+                            </div>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+
+        <section class="card p-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="mb-0">Sessions (@Model.Sessions.Count)</h5>
+                <form asp-controller="Sessions" asp-action="Create" method="get" class="d-inline">
+                    <input type="hidden" name="sessionConfigId" value="@room.Id" />
+                    <button type="submit" class="btn btn-sm btn-outline-primary">+ Start session</button>
+                </form>
+            </div>
+            @if (Model.Sessions.Count == 0)
+            {
+                <div class="room-meta">No sessions have run against this room yet.</div>
+            }
+            else
+            {
+                <ul class="sessions-mini-list">
+                    @foreach (var s in Model.Sessions.Take(10))
+                    {
+                        <li>
+                            <div>
+                                <strong>@s.Name</strong>
+                                <span class="room-meta">
+                                    @(s.StartedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? s.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))
+                                    · @s.Status
+                                </span>
+                            </div>
+                            <div class="d-flex gap-1">
+                                @if (s.Status == ESessionStatus.Active)
+                                {
+                                    <a asp-controller="Sessions" asp-action="Live" asp-route-id="@s.Id"
+                                       class="btn btn-sm btn-primary">Open live</a>
+                                }
+                                else
+                                {
+                                    <a asp-controller="PositionResults" asp-action="Index" asp-route-sessionId="@s.Id"
+                                       class="btn btn-sm btn-outline-secondary">Results</a>
+                                }
+                            </div>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+    </aside>
 </div>
+
+@* ---------- Add-anchor dialog ---------- *@
+<div class="modal fade" id="add-anchor-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form class="modal-content" id="add-anchor-form" method="post" novalidate>
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="SessionConfigId" value="@room.Id" />
+            <input type="hidden" name="Role" value="Anchor" />
+            <div class="modal-header">
+                <h5 class="modal-title">Add anchor to @room.Name</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="_chipSource" id="anchor-existing" value="existing" checked />
+                        <label class="form-check-label" for="anchor-existing">Use existing chip</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="_chipSource" id="anchor-new" value="new" />
+                        <label class="form-check-label" for="anchor-new">Register new chip</label>
+                    </div>
+                </div>
+
+                <div class="_chip-existing">
+                    <label class="form-label">Chip</label>
+                    <select class="form-select" name="ChipId">
+                        @foreach (var c in Model.AvailableChips)
+                        {
+                            <option value="@c.Id">@c.Name (@c.DeviceIdentifier)</option>
+                        }
+                    </select>
+                    @if (Model.AvailableChips.Count == 0)
+                    {
+                        <div class="form-text text-warning">All chips are already in this room. Switch to "Register new chip" to add another.</div>
+                    }
+                </div>
+
+                <div class="_chip-new" hidden>
+                    <div class="mb-2">
+                        <label class="form-label">Name</label>
+                        <input class="form-control" name="_newChipName" placeholder="e.g. A1-corner" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Device identifier (MAC / device id)</label>
+                        <input class="form-control" name="_newChipDeviceIdentifier" placeholder="AA:BB:CC:DD:EE:FF" />
+                    </div>
+                </div>
+
+                <hr />
+                <div class="row g-2">
+                    <div class="col-4">
+                        <label class="form-label">X (m)</label>
+                        <input class="form-control" name="XCoord" type="number" step="any" required />
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label">Y (m)</label>
+                        <input class="form-control" name="YCoord" type="number" step="any" required />
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label">Z (m, optional)</label>
+                        <input class="form-control" name="ZCoord" type="number" step="any" />
+                    </div>
+                </div>
+                <div class="form-text">You can also fine-tune the position later by dragging the anchor on the map.</div>
+
+                <div class="_form-error alert alert-danger mt-3" hidden></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add anchor</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@* ---------- Add-tag dialog ---------- *@
+<div class="modal fade" id="add-tag-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form class="modal-content" id="add-tag-form" method="post" novalidate>
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="SessionConfigId" value="@room.Id" />
+            <input type="hidden" name="Role" value="Tag" />
+            <div class="modal-header">
+                <h5 class="modal-title">Add tag to @room.Name</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="_chipSource" id="tag-existing" value="existing" checked />
+                        <label class="form-check-label" for="tag-existing">Use existing chip</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="_chipSource" id="tag-new" value="new" />
+                        <label class="form-check-label" for="tag-new">Register new chip</label>
+                    </div>
+                </div>
+
+                <div class="_chip-existing">
+                    <label class="form-label">Chip</label>
+                    <select class="form-select" name="ChipId">
+                        @foreach (var c in Model.AvailableChips)
+                        {
+                            <option value="@c.Id">@c.Name (@c.DeviceIdentifier)</option>
+                        }
+                    </select>
+                    @if (Model.AvailableChips.Count == 0)
+                    {
+                        <div class="form-text text-warning">All chips are already in this room. Switch to "Register new chip" to add another.</div>
+                    }
+                </div>
+
+                <div class="_chip-new" hidden>
+                    <div class="mb-2">
+                        <label class="form-label">Name</label>
+                        <input class="form-control" name="_newChipName" placeholder="e.g. helmet-1" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Device identifier (MAC / device id)</label>
+                        <input class="form-control" name="_newChipDeviceIdentifier" placeholder="AA:BB:CC:DD:EE:FF" />
+                    </div>
+                </div>
+
+                <div class="form-text">Tags are positioned live during a session, so they have no fixed coordinates.</div>
+
+                <div class="_form-error alert alert-danger mt-3" hidden></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add tag</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            const ROOM_ID = "@room.Id";
+
+            function wireChipSourceToggle(form) {
+                const radios = form.querySelectorAll('input[name="_chipSource"]');
+                const existing = form.querySelector('._chip-existing');
+                const fresh = form.querySelector('._chip-new');
+                function apply() {
+                    const val = form.querySelector('input[name="_chipSource"]:checked').value;
+                    existing.hidden = (val !== 'existing');
+                    fresh.hidden = (val !== 'new');
+                    // toggle required-ness
+                    existing.querySelectorAll('select').forEach(el => el.required = (val === 'existing'));
+                    fresh.querySelectorAll('input').forEach(el => el.required = (val === 'new'));
+                }
+                radios.forEach(r => r.addEventListener('change', apply));
+                apply();
+            }
+
+            function getAntiForgery(form) {
+                const el = form.querySelector('input[name="__RequestVerificationToken"]');
+                return el ? el.value : "";
+            }
+
+            function showError(form, text) {
+                const box = form.querySelector('._form-error');
+                if (!box) return;
+                box.textContent = text;
+                box.hidden = false;
+            }
+            function clearError(form) {
+                const box = form.querySelector('._form-error');
+                if (!box) return;
+                box.hidden = true;
+                box.textContent = "";
+            }
+
+            async function createChipIfNeeded(form) {
+                const source = form.querySelector('input[name="_chipSource"]:checked').value;
+                if (source === 'existing') {
+                    const chipId = form.querySelector('select[name="ChipId"]').value;
+                    if (!chipId) throw new Error("Please choose an existing chip.");
+                    return chipId;
+                }
+                const name = form.querySelector('input[name="_newChipName"]').value.trim();
+                const deviceId = form.querySelector('input[name="_newChipDeviceIdentifier"]').value.trim();
+                if (!name || !deviceId) throw new Error("Name and device identifier are required for a new chip.");
+
+                const resp = await fetch('/api/Chips', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ name: name, deviceIdentifier: deviceId })
+                });
+                if (!resp.ok) {
+                    let msg = "Failed to register new chip (status " + resp.status + ").";
+                    try {
+                        const err = await resp.json();
+                        if (err && err.title) msg = err.title;
+                    } catch { /* ignore */ }
+                    throw new Error(msg);
+                }
+                const created = await resp.json();
+                if (!created || !created.id) throw new Error("Chip was created but no id was returned.");
+                return created.id;
+            }
+
+            async function submitAddChip(form, role) {
+                clearError(form);
+                try {
+                    const chipId = await createChipIfNeeded(form);
+                    const body = new FormData();
+                    body.append('SessionConfigId', ROOM_ID);
+                    body.append('ChipId', chipId);
+                    body.append('Role', role);
+                    if (role === 'Anchor') {
+                        body.append('XCoord', form.querySelector('input[name="XCoord"]').value);
+                        body.append('YCoord', form.querySelector('input[name="YCoord"]').value);
+                        const z = form.querySelector('input[name="ZCoord"]').value;
+                        if (z !== '') body.append('ZCoord', z);
+                    }
+                    body.append('__RequestVerificationToken', getAntiForgery(form));
+
+                    const resp = await fetch('/SessionConfigChips/Create',
+                                             { method: 'POST', body, redirect: 'manual', credentials: 'same-origin' });
+                    if ((resp.status >= 300 && resp.status < 400) || resp.ok) {
+                        window.location.reload();
+                        return;
+                    }
+                    showError(form, "The server rejected the placement. Please check the inputs and try again.");
+                } catch (err) {
+                    showError(form, err.message || String(err));
+                }
+            }
+
+            const anchorForm = document.getElementById('add-anchor-form');
+            const tagForm = document.getElementById('add-tag-form');
+            wireChipSourceToggle(anchorForm);
+            wireChipSourceToggle(tagForm);
+            anchorForm.addEventListener('submit', e => { e.preventDefault(); submitAddChip(anchorForm, 'Anchor'); });
+            tagForm.addEventListener('submit', e => { e.preventDefault(); submitAddChip(tagForm, 'Tag'); });
+        })();
+    </script>
+}

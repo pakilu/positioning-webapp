@@ -10,6 +10,16 @@ namespace App.BLL.Positioning;
 /// </summary>
 public sealed class LeastSquaresTrilaterationSolver : ITrilaterationSolver
 {
+    /// <summary>
+    /// Minimum number of anchors required for a 2D (planar) trilateration fix.
+    /// </summary>
+    public const int MinAnchors2D = 3;
+
+    /// <summary>
+    /// Minimum number of anchors required for a 3D (volumetric) trilateration fix.
+    /// </summary>
+    public const int MinAnchors3D = 4;
+
     public bool TrySolve(
         IReadOnlyList<AnchorMeasurement> measurements,
         TrilaterationOptions? options,

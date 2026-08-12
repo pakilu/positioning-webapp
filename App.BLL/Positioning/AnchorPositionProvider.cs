@@ -48,8 +48,9 @@ public sealed class AnchorPositionProvider : IAnchorPositionProvider
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         // Session → SessionConfig → SessionConfigChips (anchors with coordinates).
-        // Tags are filtered out; anchors with missing X/Y are skipped defensively
-        // (the SessionConfigService validator already enforces this on save).
+        // Tags are filtered out; anchors with missing X/Y are skipped defensively.
+        // (A session config is expected to have ≥ 3 anchors with coordinates for
+        // 2D trilateration, but that invariant is not currently enforced on save.)
         var anchors = await db.Sessions
             .Where(s => s.Id == sessionId)
             .SelectMany(s => s.SessionConfig.SessionConfigChips)

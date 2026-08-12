@@ -8,7 +8,7 @@ ASP.NET Core (net10.0) web application for an Ultra-Wideband (UWB) indoor positi
 - `App.DAL.EF` — EF Core `AppDbContext`, migrations, repositories.
 - `App.BLL` — business logic services (positioning solver, session management, …).
 - `App.BLL.Tests` — unit tests for the BLL layer.
-- `WebApp` — ASP.NET Core host: MVC controllers, Admin area, API controllers, SignalR hubs, MQTT ingestion service.
+- `WebApp` — ASP.NET Core host: MVC controllers, API controllers, SignalR hubs, MQTT ingestion service.
 
 ## Prerequisites
 
@@ -103,17 +103,33 @@ Controls the live positioning pipeline.
 
 A `appsettings.Development.json` is also available for environment-specific overrides.
 
+## Operator flow
+
+The webapp is organised around three operator surfaces:
+
+1. **Sessions** — list of live and finished sessions; open a session for its live positioning view.
+2. **Rooms** — each room is a positioning layout with an optional floor plan. Open a room to place anchors on the plan (drag them to reposition, coordinates persist automatically) and to add anchors or tags via the inline "+ Add anchor" / "+ Add tag" dialogs. The dialog can either pick an existing chip from the pool or register a brand-new chip in one step.
+3. **Chips** — the device pool. Each row shows every room the chip is currently placed in (a chip may belong to more than one room at the same time).
+
+A collapsible getting-started wizard on the home page walks new operators
+through the four setup steps (register chips → create a room → place
+anchors → start a session) and auto-collapses once all four are done.
+
+Debug surfaces (raw MQTT/serial feed, `RawMeasurement` and
+`PositionResult` tables) are still available under the "Debug" dropdown
+on the right side of the navbar.
+
 ## Scaffolding (reference)
 
-The MVC admin controllers (in `Areas/Admin/Controllers`) were generated with:
+The MVC controllers (in `Controllers/`) were generated with:
 
 ```bash
-dotnet aspnet-codegenerator controller -name ChipsController                -m Chip                -actions -dc AppDbContext -outDir Areas/Admin/Controllers --useDefaultLayout --useAsyncActions --referenceScriptLibraries -f
-dotnet aspnet-codegenerator controller -name PositionResultsController      -m PositionResult      -actions -dc AppDbContext -outDir Areas/Admin/Controllers --useDefaultLayout --useAsyncActions --referenceScriptLibraries -f
-dotnet aspnet-codegenerator controller -name RawMeasurementsController      -m RawMeasurement      -actions -dc AppDbContext -outDir Areas/Admin/Controllers --useDefaultLayout --useAsyncActions --referenceScriptLibraries -f
-dotnet aspnet-codegenerator controller -name SessionsController             -m Session             -actions -dc AppDbContext -outDir Areas/Admin/Controllers --useDefaultLayout --useAsyncActions --referenceScriptLibraries -f
-dotnet aspnet-codegenerator controller -name SessionConfigsController       -m SessionConfig       -actions -dc AppDbContext -outDir Areas/Admin/Controllers --useDefaultLayout --useAsyncActions --referenceScriptLibraries -f
-dotnet aspnet-codegenerator controller -name SessionConfigChipsController   -m SessionConfigChip   -actions -dc AppDbContext -outDir Areas/Admin/Controllers --useDefaultLayout --useAsyncActions --referenceScriptLibraries -f
+dotnet aspnet-codegenerator controller -name ChipsController                -m Chip                -actions -dc AppDbContext -outDir Controllers --useDefaultLayout --useAsyncActions --referenceScriptLibraries -f
+dotnet aspnet-codegenerator controller -name PositionResultsController      -m PositionResult      -actions -dc AppDbContext -outDir Controllers --useDefaultLayout --useAsyncActions --referenceScriptLibraries -f
+dotnet aspnet-codegenerator controller -name RawMeasurementsController      -m RawMeasurement      -actions -dc AppDbContext -outDir Controllers --useDefaultLayout --useAsyncActions --referenceScriptLibraries -f
+dotnet aspnet-codegenerator controller -name SessionsController             -m Session             -actions -dc AppDbContext -outDir Controllers --useDefaultLayout --useAsyncActions --referenceScriptLibraries -f
+dotnet aspnet-codegenerator controller -name SessionConfigsController       -m SessionConfig       -actions -dc AppDbContext -outDir Controllers --useDefaultLayout --useAsyncActions --referenceScriptLibraries -f
+dotnet aspnet-codegenerator controller -name SessionConfigChipsController   -m SessionConfigChip   -actions -dc AppDbContext -outDir Controllers --useDefaultLayout --useAsyncActions --referenceScriptLibraries -f
 ```
 
 The REST API controllers (in `ApiControllers`) were generated with:

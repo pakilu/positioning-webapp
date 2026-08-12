@@ -1,25 +1,120 @@
+@model WebApp.Models.HomeIndexViewModel
 @{
-    ViewData["Title"] = "Setup";
+    ViewData["Title"] = "Home";
+
+    // Steps encoded in a small local structure so the Razor stays readable.
+    var steps = new[]
+    {
+        new
+        {
+            Done = Model.HasChips,
+            Title = "Register your chips",
+            Blurb = "Add each physical UWB device (anchor or tag) to the chip pool.",
+            LinkText = "Go to chips",
+            Controller = "Chips",
+            Action = "Index",
+        },
+        new
+        {
+            Done = Model.HasRooms,
+            Title = "Create a room",
+            Blurb = "A room is a positioning layout: floor plan, anchors, tags.",
+            LinkText = "Go to rooms",
+            Controller = "SessionConfigs",
+            Action = "Index",
+        },
+        new
+        {
+            Done = Model.HasPlacedAnchors,
+            Title = "Place anchors on the plan",
+            Blurb = "Open a room and drag anchors to their real-world positions. Trilateration needs at least three anchors with X and Y set.",
+            LinkText = "Go to rooms",
+            Controller = "SessionConfigs",
+            Action = "Index",
+        },
+        new
+        {
+            Done = Model.HasSessions,
+            Title = "Start a session",
+            Blurb = "A session records positions for a room over time.",
+            LinkText = "Go to sessions",
+            Controller = "Sessions",
+            Action = "Index",
+        },
+    };
+
+    var completedCount = steps.Count(s => s.Done);
+    var totalCount = steps.Length;
 }
 
-<div>
-    <h1>Positioning setup</h1>
+<h1>Positioning</h1>
 
-    <div class="list-group col-md-7">
-        <a class="list-group-item list-group-item-action" asp-controller="Chips" asp-action="Index">
-            1. Register physical chips
-        </a>
-        <a class="list-group-item list-group-item-action" asp-controller="SessionConfigs" asp-action="Index">
-            2. Create or choose a room layout
-        </a>
-        <a class="list-group-item list-group-item-action" asp-controller="SessionConfigChips" asp-action="Index">
-            3. Assign each chip as an anchor or tag
-        </a>
-        <a class="list-group-item list-group-item-action" asp-controller="Sessions" asp-action="Index">
-            4. Start a session for that layout
-        </a>
-        <a class="list-group-item list-group-item-action" asp-controller="Home" asp-action="Live">
-            5. Watch live tag coordinates
-        </a>
+@if (Model.IsFullyConfigured)
+{
+    <div class="wizard-summary mb-3">
+        @if (Model.LatestActiveSession is not null)
+        {
+            <div class="alert alert-primary d-flex justify-content-between align-items-center flex-wrap gap-2 mb-0">
+                <div>
+                    Active session
+                    <strong>@Model.LatestActiveSession.Name</strong>
+                    on <strong>@Model.LatestActiveSession.SessionConfig?.Name</strong>
+                    @if (Model.LatestActiveSession.StartedAt is not null)
+                    {
+                        <span class="text-muted">
+                            (started @Model.LatestActiveSession.StartedAt.Value.ToLocalTime().ToString("HH:mm"))
+                        </span>
+                    }
+                </div>
+                <a asp-controller="Sessions" asp-action="Live" asp-route-id="@Model.LatestActiveSession.Id"
+                   class="btn btn-primary btn-sm">Open live view</a>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-primary d-flex justify-content-between align-items-center flex-wrap gap-2 mb-0">
+                <div>Setup complete — no session running.</div>
+                <a asp-controller="Sessions" asp-action="Create" class="btn btn-primary btn-sm">Start a session</a>
+            </div>
+        }
     </div>
-</div>
+}
+
+<details class="setup-wizard" @(Model.IsFullyConfigured ? "" : "open")>
+    <summary>
+        <span class="setup-wizard-title">Getting started</span>
+        <span class="setup-wizard-progress">@completedCount / @totalCount steps complete</span>
+    </summary>
+
+    <ol class="setup-steps">
+        @{ var idx = 0; }
+        @foreach (var step in steps)
+        {
+            idx++;
+            var isNext = !step.Done && steps.Take(idx - 1).All(s => s.Done);
+            <li class="setup-step @(step.Done ? "is-done" : "") @(isNext ? "is-next" : "")">
+                <div class="setup-step-marker" aria-hidden="true">
+                    @if (step.Done)
+                    {
+                        <span>&#10003;</span>
+                    }
+                    else
+                    {
+                        <span>@idx</span>
+                    }
+                </div>
+                <div class="setup-step-body">
+                    <div class="setup-step-title">@step.Title</div>
+                    <div class="setup-step-blurb">@step.Blurb</div>
+                    @if (!step.Done)
+                    {
+                        <a class="btn btn-sm @(isNext ? "btn-primary" : "btn-outline-primary")"
+                           asp-controller="@step.Controller" asp-action="@step.Action">
+                            @step.LinkText
+                        </a>
+                    }
+                </div>
+            </li>
+        }
+    </ol>
+</details>

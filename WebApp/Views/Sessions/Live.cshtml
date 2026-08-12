@@ -1,26 +1,37 @@
 @model App.Domain.Session
 @using App.Domain
-@using System.Text.Json
-@using WebApp.Areas.Admin.Controllers
+@using App.BLL.Positioning
+@using WebApp.Models
 
 @{
     ViewData["Title"] = $"Live - {Model.Name}";
-    var minAnchors = SessionsController.MinAnchorsForTrilateration;
-    var anchors = Model.SessionConfig?.SessionConfigChips
-        .Where(c => c.Role == App.Domain.EChipRole.Anchor && c.XCoord != null && c.YCoord != null)
-        .Select(c => new
-        {
-            id = c.Id,
-            chipId = c.ChipId,
-            name =  c.Chip?.DeviceIdentifier ?? c.Chip?.Name ?? c.ChipId.ToString(),
-            x = c.XCoord,
-            y = c.YCoord,
-            z = c.ZCoord ?? 0
-        })
-        .ToList() ?? [];
+    var minAnchors = LeastSquaresTrilaterationSolver.MinAnchors2D;
 
+    var anchorList = Model.SessionConfig?.SessionConfigChips
+        .Where(c => c.Role == EChipRole.Anchor && c.XCoord != null && c.YCoord != null)
+        .Select(c => new PositionPlaneAnchor
+        {
+            Id = c.Id,
+            ChipId = c.ChipId,
+            Name = c.Chip?.DeviceIdentifier ?? c.Chip?.Name ?? c.ChipId.ToString(),
+            X = (double)c.XCoord!.Value,
+            Y = (double)c.YCoord!.Value,
+            Z = (double)(c.ZCoord ?? 0m),
+        })
+        .ToList() ?? new List<PositionPlaneAnchor>();
+
+    var tagList = Model.SessionConfig?.SessionConfigChips
+        .Where(c => c.Role == EChipRole.Tag)
+        .Select(c => new PositionPlaneTag
+        {
+            ChipId = c.ChipId,
+            DeviceIdentifier = c.Chip?.DeviceIdentifier,
+            Name = c.Chip?.Name ?? c.Chip?.DeviceIdentifier ?? c.ChipId.ToString(),
+        })
+        .ToList() ?? new List<PositionPlaneTag>();
+
+    PositionPlaneFloorPlan? floorPlanVm = null;
     var sc = Model.SessionConfig;
-    object? floorPlan = null;
     if (sc is not null
         && !string.IsNullOrWhiteSpace(sc.FloorPlanImagePath)
         && sc.FloorPlanOriginXMeters.HasValue
@@ -28,38 +39,62 @@
         && sc.FloorPlanWidthMeters.HasValue  && sc.FloorPlanWidthMeters  > 0
         && sc.FloorPlanHeightMeters.HasValue && sc.FloorPlanHeightMeters > 0)
     {
-        // Apply the optional drawing scale ("1 : N") so downstream JS always
-        // works in real-world units. A null / non-positive scale means no
-        // scaling. Origin is treated as already in world units.
-        var scale = sc.FloorPlanScale.HasValue && sc.FloorPlanScale.Value > 0
-            ? sc.FloorPlanScale.Value
-            : 1.0;
-        floorPlan = new
+        floorPlanVm = new PositionPlaneFloorPlan
         {
-            url = sc.FloorPlanImagePath,
-            ox = sc.FloorPlanOriginXMeters!.Value,
-            oy = sc.FloorPlanOriginYMeters!.Value,
-            w  = sc.FloorPlanWidthMeters!.Value  * scale,
-            h  = sc.FloorPlanHeightMeters!.Value * scale,
-            scale = scale,
-            rot = sc.FloorPlanRotationDeg ?? 0,
-            opacity = sc.FloorPlanOpacity ?? 0.7
+            Url     = sc.FloorPlanImagePath!,
+            Ox      = sc.FloorPlanOriginXMeters!.Value,
+            Oy      = sc.FloorPlanOriginYMeters!.Value,
+            W       = sc.FloorPlanWidthMeters!.Value,
+            H       = sc.FloorPlanHeightMeters!.Value,
+            Scale   = sc.FloorPlanScale.HasValue && sc.FloorPlanScale.Value > 0 ? sc.FloorPlanScale.Value : 1.0,
+            Rot     = sc.FloorPlanRotationDeg ?? 0,
+            Opacity = sc.FloorPlanOpacity ?? 0.7,
         };
     }
 
-    var tags = Model.SessionConfig?.SessionConfigChips
-        .Where(c => c.Role == App.Domain.EChipRole.Tag)
-        .Select(c => new
-        {
-            chipId = c.ChipId,
-            deviceIdentifier = c.Chip?.DeviceIdentifier,
-            name = c.Chip?.Name ?? c.Chip?.DeviceIdentifier ?? c.ChipId.ToString()
-        })
-        .ToList() ?? [];
+    var planeVm = new PositionPlaneViewModel
+    {
+        Anchors = anchorList,
+        Tags = tagList,
+        FloorPlan = floorPlanVm,
+        Mode = "live",
+        DomId = "session-live-plane",
+    };
 
     var activateButtonText = Model.Status == ESessionStatus.Active
         ? "Deactivate session"
         : "Activate session";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/position-plane.css" asp-append-version="true" />
+    <style>
+        .live-grid {
+            display: grid;
+            gap: 1rem;
+            grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+            align-items: start;
+        }
+
+        .live-stage-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            align-items: start;
+            margin-bottom: .75rem;
+        }
+
+        .live-stage-header h4 { margin-bottom: .15rem; }
+        .live-stage-header p  { margin: 0; color: #5c6670; }
+
+        .live-stat { min-width: 5rem; text-align: right; }
+        .live-stat span { display: block; font-size: 1.4rem; font-weight: 700; line-height: 1; }
+        .live-stat small { color: #5c6670; }
+
+        @@media (max-width: 900px) {
+            .live-grid { grid-template-columns: 1fr; }
+        }
+    </style>
 }
 
 <h1>Live session: @Model.Name</h1>
@@ -71,16 +106,17 @@
     </div>
 }
 
-@if (anchors.Count < minAnchors)
+@if (anchorList.Count < minAnchors)
 {
     <div class="alert alert-warning" role="alert">
         <strong>Not enough anchors for trilateration.</strong>
-        This layout has <strong>@anchors.Count</strong> anchor@(anchors.Count == 1 ? "" : "s") with coordinates, but at least
+        This layout has <strong>@anchorList.Count</strong> anchor@(anchorList.Count == 1 ? "" : "s") with coordinates, but at least
         <strong>@minAnchors</strong> are required to compute a position fix.
-        <a asp-controller="SessionConfigChips" asp-action="Index">Add more anchors to the layout</a>
+        <a asp-controller="SessionConfigs" asp-action="Details" asp-route-id="@Model.SessionConfigId">Open the room to place more anchors</a>
         and make sure each has X and Y coordinates set.
     </div>
 }
+
 <p class="text-muted">
     Config: <strong>@Model.SessionConfig?.Name</strong><br />
     Session status: <strong>@Model.Status</strong><br />
@@ -117,27 +153,13 @@
                 <p id="latest-fix">Waiting for a position fix</p>
             </div>
             <div class="live-stat">
-                <span id="anchor-count">@anchors.Count</span>
+                <span id="anchor-count">@anchorList.Count</span>
                 <small>anchors</small>
             </div>
         </div>
-        <div class="plane-toolbar">
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="zoom-in" title="Zoom in">+</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="zoom-out" title="Zoom out">&minus;</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="zoom-reset" title="Reset view">Reset</button>
-            <span class="plane-zoom-label" id="zoom-label">100%</span>
-        </div>
-        <div id="position-plane" class="position-plane">
-            <div id="plane-content" class="plane-content">
-                <img id="floor-plan" class="floor-plan" hidden alt="Floor plan" />
-                <div class="axis-label axis-x">X</div>
-                <div class="axis-label axis-y">Y</div>
-                <div id="tag-marker" class="tag-marker" hidden>
-                    <span></span>
-                    <strong></strong>
-                </div>
-            </div>
-        </div>
+
+        <script src="~/js/position-plane.js" asp-append-version="true"></script>
+        @await Html.PartialAsync("_PositionPlane", planeVm)
     </section>
 
     <section>
@@ -164,38 +186,17 @@
     <script>
         const SESSION_ID = "@Model.Id";
         const MAX_ROWS = 50;
-        const ANCHORS = @Html.Raw(JsonSerializer.Serialize(anchors));
-        const TAGS = @Html.Raw(JsonSerializer.Serialize(tags));
-        const FLOOR_PLAN = @Html.Raw(JsonSerializer.Serialize(floorPlan));
         const statusEl = document.getElementById("conn-status");
-        const posBody  = document.getElementById("positions");
-        const plane = document.getElementById("position-plane");
-        const content = document.getElementById("plane-content");
-        const marker = document.getElementById("tag-marker");
-        const zoomLabel = document.getElementById("zoom-label");
+        const posBody = document.getElementById("positions");
         const latestFix = document.getElementById("latest-fix");
-        const tagNames = new Map(TAGS.map(t => [String(t.chipId).toLowerCase(), t.deviceIdentifier]));
-        const tagDeviceIds = new Map(TAGS.map(t => [String(t.chipId).toLowerCase(), t.name]));
-        const anchorEls = new Map(); // chipId (lower) -> DOM element
+        const plane = window.PositionPlanes["session-live-plane"];
 
-        const bounds = (() => {
-            const xs = ANCHORS.map(a => Number(a.x));
-            const ys = ANCHORS.map(a => Number(a.y));
-            let minX = Math.min(...xs, 0);
-            let maxX = Math.max(...xs, 10);
-            let minY = Math.min(...ys, 0);
-            let maxY = Math.max(...ys, 10);
-            // Make sure the whole floor plan fits into the visible world rectangle
-            if (FLOOR_PLAN) {
-                minX = Math.min(minX, FLOOR_PLAN.ox);
-                minY = Math.min(minY, FLOOR_PLAN.oy);
-                maxX = Math.max(maxX, FLOOR_PLAN.ox + FLOOR_PLAN.w);
-                maxY = Math.max(maxY, FLOOR_PLAN.oy + FLOOR_PLAN.h);
-            }
-            const padX = Math.max((maxX - minX) * 0.12, 0.5);
-            const padY = Math.max((maxY - minY) * 0.12, 0.5);
-            return { minX: minX - padX, maxX: maxX + padX, minY: minY - padY, maxY: maxY + padY };
-        })();
+        function fmt(n) { return typeof n === "number" ? n.toFixed(3) : (n ?? ""); }
+
+        function prepend(tbody, html) {
+            tbody.insertAdjacentHTML("afterbegin", html);
+            while (tbody.rows.length > MAX_ROWS) tbody.deleteRow(tbody.rows.length - 1);
+        }
 
         async function joinThisSession() {
             try {
@@ -218,153 +219,13 @@
             statusEl.className = "badge bg-danger";
         });
 
-        function prepend(tbody, html) {
-            tbody.insertAdjacentHTML("afterbegin", html);
-            while (tbody.rows.length > MAX_ROWS) tbody.deleteRow(tbody.rows.length - 1);
-        }
-
-        function fmt(n) {
-            return (typeof n === "number") ? n.toFixed(3) : (n ?? "");
-        }
-
-        function tagLabel(tagId) {
-            if (!tagId) return "";
-            const key = String(tagId).toLowerCase();
-            return tagNames.get(key) ?? String(tagId).slice(0, 8);
-        }
-
-        function toPercent(x, y) {
-            const left = ((x - bounds.minX) / (bounds.maxX - bounds.minX)) * 100;
-            const top = 100 - ((y - bounds.minY) / (bounds.maxY - bounds.minY)) * 100;
-            return {
-                left: Math.max(0, Math.min(100, left)),
-                top: Math.max(0, Math.min(100, top))
-            };
-        }
-
-        function updateAnchorVisual(el, anchor) {
-            const p = toPercent(Number(anchor.x), Number(anchor.y));
-            el.style.left = `${p.left}%`;
-            el.style.top = `${p.top}%`;
-            el.title = `${anchor.name} (${fmt(Number(anchor.x))}, ${fmt(Number(anchor.y))})`;
-        }
-
-        function placeAnchor(anchor) {
-            const el = document.createElement("div");
-            el.className = "anchor-marker is-draggable";
-            el.innerHTML = `<span></span><strong>${anchor.name}</strong>`;
-            content.appendChild(el);
-            updateAnchorVisual(el, anchor);
-            if (anchor.chipId) {
-                anchorEls.set(String(anchor.chipId).toLowerCase(), el);
-            }
-            enableAnchorDrag(el, anchor);
-        }
-
-        // --- anchor drag & drop -----------------------------------------
-        // Convert a pointer position (in client/viewport coords) to world
-        // coordinates, taking the current pan/zoom of the plane into account.
-        function pointerToWorld(clientX, clientY) {
-            const planeRect = plane.getBoundingClientRect();
-            // .plane-content is now sized to preserve the world aspect ratio
-            // and centered inside the plane, so use *its* rect (before the
-            // pan/zoom transform) as the reference frame.
-            const cw = content.offsetWidth;
-            const ch = content.offsetHeight;
-            const cLeft = content.offsetLeft;
-            const cTop  = content.offsetTop;
-            const px = clientX - planeRect.left - cLeft;
-            const py = clientY - planeRect.top  - cTop;
-            const localX = (px - view.tx) / view.scale;
-            const localY = (py - view.ty) / view.scale;
-            const fracX = localX / cw;
-            const fracY = localY / ch;
-            return {
-                x: bounds.minX + fracX * (bounds.maxX - bounds.minX),
-                y: bounds.minY + (1 - fracY) * (bounds.maxY - bounds.minY),
-                fracX,
-                fracY
-            };
-        }
-
-        async function persistAnchorCoords(anchor) {
-            if (!anchor.id) return;
-            try {
-                const resp = await fetch(`/api/SessionConfigChips/${encodeURIComponent(anchor.id)}/coords`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ x: Number(anchor.x), y: Number(anchor.y) })
-                });
-                if (!resp.ok) {
-                    console.warn("[positioning] failed to persist anchor coords", resp.status);
-                }
-            } catch (err) {
-                console.warn("[positioning] failed to persist anchor coords", err);
-            }
-        }
-
-        function enableAnchorDrag(el, anchor) {
-            let anchorDragging = false;
-            let moved = false;
-            let startX = 0, startY = 0;
-
-            el.addEventListener("pointerdown", e => {
-                // Only left mouse / primary pointer
-                if (e.button !== undefined && e.button !== 0) return;
-                e.stopPropagation();          // don't start a plane pan
-                e.preventDefault();
-                anchorDragging = true;
-                moved = false;
-                startX = e.clientX;
-                startY = e.clientY;
-                el.setPointerCapture(e.pointerId);
-                el.classList.add("is-dragging");
-            });
-
-            el.addEventListener("pointermove", e => {
-                if (!anchorDragging) return;
-                if (!moved) {
-                    const dx = e.clientX - startX;
-                    const dy = e.clientY - startY;
-                    if (dx * dx + dy * dy < 9) return; // small deadzone
-                    moved = true;
-                }
-                const w = pointerToWorld(e.clientX, e.clientY);
-                anchor.x = w.x;
-                anchor.y = w.y;
-                updateAnchorVisual(el, anchor);
-            });
-
-            function finishDrag(e) {
-                if (!anchorDragging) return;
-                anchorDragging = false;
-                try { el.releasePointerCapture(e.pointerId); } catch {}
-                el.classList.remove("is-dragging");
-                if (moved) {
-                    persistAnchorCoords(anchor);
-                }
-            }
-            el.addEventListener("pointerup", finishDrag);
-            el.addEventListener("pointercancel", finishDrag);
-        }
-
         // --- routed-anchor highlight -------------------------------------
         let routingInFlight = false;
         let routingPending = null;
 
-        function applySelectedAnchors(selectedChipIds) {
-            const selected = new Set((selectedChipIds || []).map(id => String(id).toLowerCase()));
-            anchorEls.forEach((el, chipId) => {
-                el.classList.toggle("is-selected", selected.has(chipId));
-            });
-        }
-
         async function refreshRouting(tagDeviceId) {
             if (!tagDeviceId) return;
-            if (routingInFlight) {
-                routingPending = tagDeviceId;
-                return;
-            }
+            if (routingInFlight) { routingPending = tagDeviceId; return; }
             routingInFlight = true;
             try {
                 const url = `/api/anchor-routing/sessions/${encodeURIComponent(SESSION_ID)}` +
@@ -373,7 +234,7 @@
                 if (resp.ok) {
                     const decision = await resp.json();
                     const ids = (decision.anchors || []).map(a => a.chipId);
-                    applySelectedAnchors(ids);
+                    plane.setSelectedAnchors(ids);
                 }
             } catch (err) {
                 console.warn("[positioning] anchor-routing fetch failed", err);
@@ -387,169 +248,20 @@
             }
         }
 
-        // --- fit the world canvas to the plane while preserving aspect -----
-        // Without this, the plane-content is stretched to fill the plane
-        // (which has a fixed min-height), and any floor plan / anchor layout
-        // whose world aspect ratio differs (e.g. A3 landscape) ends up
-        // visibly squashed.
-        function fitContentToWorld() {
-            const worldW = bounds.maxX - bounds.minX;
-            const worldH = bounds.maxY - bounds.minY;
-            if (worldW <= 0 || worldH <= 0) return;
-            const worldAR = worldW / worldH;
-
-            const rect = plane.getBoundingClientRect();
-            if (rect.width <= 0 || rect.height <= 0) return;
-            const planeAR = rect.width / rect.height;
-
-            let cw, ch;
-            if (planeAR > worldAR) {
-                // plane is wider than world -> fit by height, letterbox sides
-                ch = rect.height;
-                cw = ch * worldAR;
-            } else {
-                // plane is taller than world -> fit by width, letterbox top/bottom
-                cw = rect.width;
-                ch = cw / worldAR;
-            }
-            content.style.width  = `${cw}px`;
-            content.style.height = `${ch}px`;
-            content.style.left   = `${(rect.width  - cw) / 2}px`;
-            content.style.top    = `${(rect.height - ch) / 2}px`;
-            content.style.right  = "auto";
-            content.style.bottom = "auto";
-        }
-
-        // --- pan & zoom ----------------------------------------------------
-        const view = { scale: 1, tx: 0, ty: 0 };
-        const MIN_SCALE = 0.25;
-        const MAX_SCALE = 8;
-
-        function applyView() {
-            content.style.transform = `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})`;
-            // counter-scale markers so dots and labels keep their size
-            const inv = 1 / view.scale;
-            content.querySelectorAll(".anchor-marker, .tag-marker").forEach(el => {
-                el.style.setProperty("--inv-scale", inv);
-            });
-            zoomLabel.textContent = `${Math.round(view.scale * 100)}%`;
-        }
-
-        function zoomAt(clientX, clientY, factor) {
-            const rect = plane.getBoundingClientRect();
-            const px = clientX - rect.left;
-            const py = clientY - rect.top;
-            const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, view.scale * factor));
-            const k = newScale / view.scale;
-            // keep the point under the cursor stationary
-            view.tx = px - k * (px - view.tx);
-            view.ty = py - k * (py - view.ty);
-            view.scale = newScale;
-            applyView();
-        }
-
-        plane.addEventListener("wheel", e => {
-            e.preventDefault();
-            const factor = Math.exp(-e.deltaY * 0.0015);
-            zoomAt(e.clientX, e.clientY, factor);
-        }, { passive: false });
-
-        let dragging = false;
-        let lastX = 0, lastY = 0;
-        plane.addEventListener("pointerdown", e => {
-            dragging = true;
-            lastX = e.clientX; lastY = e.clientY;
-            plane.setPointerCapture(e.pointerId);
-            plane.classList.add("is-panning");
-        });
-        plane.addEventListener("pointermove", e => {
-            if (!dragging) return;
-            view.tx += e.clientX - lastX;
-            view.ty += e.clientY - lastY;
-            lastX = e.clientX; lastY = e.clientY;
-            applyView();
-        });
-        function endDrag(e) {
-            if (!dragging) return;
-            dragging = false;
-            try { plane.releasePointerCapture(e.pointerId); } catch {}
-            plane.classList.remove("is-panning");
-        }
-        plane.addEventListener("pointerup", endDrag);
-        plane.addEventListener("pointercancel", endDrag);
-
-        document.getElementById("zoom-in").addEventListener("click", () => {
-            const r = plane.getBoundingClientRect();
-            zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1.25);
-        });
-        document.getElementById("zoom-out").addEventListener("click", () => {
-            const r = plane.getBoundingClientRect();
-            zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1 / 1.25);
-        });
-        document.getElementById("zoom-reset").addEventListener("click", () => {
-            view.scale = 1; view.tx = 0; view.ty = 0; applyView();
-        });
-
-        fitContentToWorld();
-        applyView();
-        window.addEventListener("resize", () => {
-            fitContentToWorld();
-            applyView();
-        });
-
-        function updateMarker(m) {
-            const x = Number(m.x);
-            const y = Number(m.y);
-            if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-
-            const p = toPercent(x, y);
-            marker.hidden = false;
-            marker.style.left = `${p.left}%`;
-            marker.style.top = `${p.top}%`;
-            marker.querySelector("strong").textContent = tagLabel(m.tagId);
-            latestFix.textContent = `Tag ${tagLabel(m.tagId)} at X ${fmt(x)}, Y ${fmt(y)}, Z ${fmt(Number(m.z))}`;
-        }
-
-        function placeFloorPlan() {
-            if (!FLOOR_PLAN) return;
-            const img = document.getElementById("floor-plan");
-            // Top-left of image = (ox, oy + h) in world; bottom-right = (ox + w, oy)
-            const tl = toPercent(FLOOR_PLAN.ox, FLOOR_PLAN.oy + FLOOR_PLAN.h);
-            const br = toPercent(FLOOR_PLAN.ox + FLOOR_PLAN.w, FLOOR_PLAN.oy);
-            img.src = FLOOR_PLAN.url;
-            img.style.left    = `${tl.left}%`;
-            img.style.top     = `${tl.top}%`;
-            img.style.width   = `${br.left - tl.left}%`;
-            img.style.height  = `${br.top  - tl.top}%`;
-            img.style.opacity = FLOOR_PLAN.opacity;
-            if (FLOOR_PLAN.rot) {
-                img.style.transform = `rotate(${FLOOR_PLAN.rot}deg)`;
-                img.style.transformOrigin = "center center";
-            }
-            img.hidden = false;
-        }
-
-        placeFloorPlan();
-        ANCHORS.forEach(placeAnchor);
-
         window.addEventListener("positioning:position", e => {
-            const m = e.detail; // PositionResultBroadcast
+            const m = e.detail;
+            if (m.sessionId && m.sessionId.toString().toLowerCase() !== SESSION_ID.toLowerCase()) return;
 
-            // The server broadcasts to Clients.All as well as the per-session
-            // group, so filter to just this session.
-            if (m.sessionId && m.sessionId.toString().toLowerCase() !== SESSION_ID.toLowerCase()) {
-                return;
-            }
+            plane.updateTagMarker(m);
+            const label = plane.tagLabel(m.tagId);
+            latestFix.textContent = `Tag ${label} at X ${fmt(Number(m.x))}, Y ${fmt(Number(m.y))}, Z ${fmt(Number(m.z))}`;
 
-            updateMarker(m);
-
-            // Refresh which anchors the routing service currently picks for this tag.
-            const tagDeviceId = m.tagId ? tagDeviceIds.get(String(m.tagId).toLowerCase()) : null;
+            const tagDeviceId = plane.tagDeviceIdFor(m.tagId);
             if (tagDeviceId) refreshRouting(tagDeviceId);
 
             prepend(posBody, `<tr>
                 <td>${new Date(m.recordedAt).toLocaleTimeString()}</td>
-                <td>${tagLabel(m.tagId)}</td>
+                <td>${label}</td>
                 <td>${fmt(m.x)}</td>
                 <td>${fmt(m.y)}</td>
                 <td>${fmt(m.z)}</td>
@@ -558,244 +270,4 @@
     </script>
 }
 
-@section Styles {
-    <style>
-        .live-grid {
-            display: grid;
-            gap: 1rem;
-            grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
-            align-items: start;
-        }
 
-        .live-stage-header {
-            display: flex;
-            justify-content: space-between;
-            gap: 1rem;
-            align-items: start;
-            margin-bottom: .75rem;
-        }
-
-        .live-stage-header h4 {
-            margin-bottom: .15rem;
-        }
-
-        .live-stage-header p {
-            margin: 0;
-            color: #5c6670;
-        }
-
-        .live-stat {
-            min-width: 5rem;
-            text-align: right;
-        }
-
-        .live-stat span {
-            display: block;
-            font-size: 1.4rem;
-            font-weight: 700;
-            line-height: 1;
-        }
-
-        .live-stat small {
-            color: #5c6670;
-        }
-
-        .plane-toolbar {
-            display: flex;
-            align-items: center;
-            gap: .35rem;
-            margin-bottom: .5rem;
-        }
-
-        .plane-zoom-label {
-            margin-left: .5rem;
-            color: #5c6670;
-            font-size: .8rem;
-        }
-
-        .position-plane {
-            position: relative;
-            min-height: 520px;
-            overflow: hidden;
-            border: 1px solid #cfd6dd;
-            border-radius: 8px;
-            background: #fbfcfd;
-            touch-action: none;
-            cursor: grab;
-        }
-
-        .position-plane.is-panning { cursor: grabbing; }
-
-        .plane-content {
-            position: absolute;
-            /* size + position are set from JS in fitContentToWorld() so the
-               canvas preserves the world's aspect ratio (letterboxed inside
-               the plane). */
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            transform-origin: 0 0;
-            background:
-                linear-gradient(#eef2f5 1px, transparent 1px),
-                linear-gradient(90deg, #eef2f5 1px, transparent 1px),
-                transparent;
-            background-size: 40px 40px;
-        }
-
-        .floor-plan {
-            position: absolute;
-            z-index: 1;                    /* below anchors (2) and tag (3) */
-            pointer-events: none;
-            user-select: none;
-            -webkit-user-drag: none;
-            image-rendering: -webkit-optimize-contrast;
-        }
-
-        .axis-label {
-            position: absolute;
-            color: #66717c;
-            font-size: .8rem;
-            font-weight: 700;
-            pointer-events: none;
-        }
-
-        .axis-x {
-            right: .75rem;
-            bottom: .5rem;
-        }
-
-        .axis-y {
-            left: .65rem;
-            top: .55rem;
-        }
-
-        .anchor-marker,
-        .tag-marker {
-            position: absolute;
-            --inv-scale: 1;
-            /* Only the dot itself sits on the coordinate; the label is
-               positioned absolutely below and does not shift the anchor point. */
-            transform: translate(-50%, -50%) scale(var(--inv-scale));
-            transform-origin: center center;
-            z-index: 2;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            line-height: 0;
-        }
-
-.anchor-marker.is-draggable {
-            cursor: grab;
-            touch-action: none;
-        }
-
-        .anchor-marker.is-dragging {
-            cursor: grabbing;
-            z-index: 4;
-        }
-
-        .anchor-marker.is-dragging span {
-            border-color: #245c8a;
-            box-shadow: 0 0 0 5px rgba(36, 92, 138, .22);
-        }
-
-        .anchor-marker span {
-            display: block;
-            width: 16px;
-            height: 16px;
-            border: 3px solid #9aa7b3;
-            border-radius: 50%;
-            background: white;
-            box-shadow: 0 0 0 3px rgba(154, 167, 179, .12);
-            opacity: .7;
-            transition: border-color .2s ease, background .2s ease, box-shadow .2s ease, opacity .2s ease;
-        }
-
-        .anchor-marker strong {
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            display: block;
-            margin-top: .25rem;
-            max-width: 8rem;
-            line-height: 1.1;
-            text-align: center;
-            color: #6c7a86;
-            font-size: .75rem;
-            font-weight: 700;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            transition: color .2s ease;
-        }
-
-        .anchor-marker.is-selected span {
-            border-color: #245c8a;
-            background: #245c8a;
-            box-shadow: 0 0 0 3px rgba(36, 92, 138, .18);
-            opacity: 1;
-        }
-
-        .anchor-marker.is-selected strong {
-            color: #245c8a;
-        }
-
-        .tag-marker {
-            z-index: 3;
-            transition: left .18s ease, top .18s ease;
-        }
-
-        .tag-marker::before {
-            content: "";
-            position: absolute;
-            left: 50%;
-            top: 50%;
-            width: 18px;
-            height: 18px;
-            transform: translate(-50%, -50%);
-            border: 2px solid rgba(36, 133, 74, .28);
-            border-radius: 50%;
-            pointer-events: none;
-        }
-
-        .tag-marker span {
-            display: block;
-            width: 10px;
-            height: 10px;
-            border: 2px solid white;
-            border-radius: 50%;
-            background: #24854a;
-            box-shadow: 0 2px 4px rgba(20, 67, 42, .35);
-        }
-
-        .tag-marker strong {
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            display: block;
-            margin-top: .25rem;
-            max-width: 8rem;
-            line-height: 1.1;
-            color: #24854a;
-            font-size: .75rem;
-            font-weight: 700;
-            text-align: center;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        @@media (max-width: 900px) {
-            .live-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .position-plane {
-                min-height: 420px;
-            }
-        }
-    </style>
-}
