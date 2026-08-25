@@ -156,12 +156,35 @@ namespace WebApp.Controllers
                 return NotFound();
             }
 
-            var sessionConfig = await _context.SessionConfigs.FindAsync(id);
+            var sessionConfig = await _context.SessionConfigs
+                .Include(sc => sc.SessionConfigChips)
+                    .ThenInclude(scc => scc.Chip)
+                .FirstOrDefaultAsync(sc => sc.Id == id);
             if (sessionConfig == null)
             {
                 return NotFound();
             }
-            return View(sessionConfig);
+            return View(BuildEditViewModel(sessionConfig));
+        }
+
+        private static EditRoomLayoutViewModel BuildEditViewModel(SessionConfig room)
+        {
+            var anchors = room.SessionConfigChips?
+                .Where(c => c.Role == EChipRole.Anchor && c.XCoord != null && c.YCoord != null)
+                .Select(c => new EditRoomLayoutViewModel.PreviewAnchor
+                {
+                    Name = c.Chip?.Name ?? c.Chip?.DeviceIdentifier ?? c.ChipId.ToString(),
+                    X = (double)c.XCoord!.Value,
+                    Y = (double)c.YCoord!.Value,
+                })
+                .ToList()
+                ?? new List<EditRoomLayoutViewModel.PreviewAnchor>();
+
+            return new EditRoomLayoutViewModel
+            {
+                Room = room,
+                Anchors = anchors,
+            };
         }
 
         // POST: SessionConfigs/Edit/5
@@ -254,7 +277,27 @@ namespace WebApp.Controllers
                 }
                 return RedirectToAction(nameof(Index));
             }
-            return View(sessionConfig);
+
+            // Re-hydrate anchors so the preview still renders on validation errors.
+            var reloaded = await _context.SessionConfigs
+                .Include(sc => sc.SessionConfigChips)
+                    .ThenInclude(scc => scc.Chip)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(sc => sc.Id == id);
+            var vmRoom = reloaded ?? sessionConfig;
+            // Preserve the just-entered values so the user doesn't lose them.
+            vmRoom.Name = sessionConfig.Name;
+            vmRoom.Description = sessionConfig.Description;
+            vmRoom.PlannedDurationSeconds = sessionConfig.PlannedDurationSeconds;
+            vmRoom.FloorPlanImagePath = sessionConfig.FloorPlanImagePath;
+            vmRoom.FloorPlanOriginXMeters = sessionConfig.FloorPlanOriginXMeters;
+            vmRoom.FloorPlanOriginYMeters = sessionConfig.FloorPlanOriginYMeters;
+            vmRoom.FloorPlanWidthMeters = sessionConfig.FloorPlanWidthMeters;
+            vmRoom.FloorPlanHeightMeters = sessionConfig.FloorPlanHeightMeters;
+            vmRoom.FloorPlanScale = sessionConfig.FloorPlanScale;
+            vmRoom.FloorPlanRotationDeg = sessionConfig.FloorPlanRotationDeg;
+            vmRoom.FloorPlanOpacity = sessionConfig.FloorPlanOpacity;
+            return View(BuildEditViewModel(vmRoom));
         }
 
         // GET: SessionConfigs/Delete/5

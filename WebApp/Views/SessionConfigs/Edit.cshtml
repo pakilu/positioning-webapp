@@ -1,159 +1,345 @@
-@model App.Domain.SessionConfig
+@model WebApp.Models.EditRoomLayoutViewModel
+@using System.Text.Json
 
 @{
     ViewData["Title"] = "Edit room layout";
-    var hasPlan = !string.IsNullOrWhiteSpace(Model.FloorPlanImagePath);
+    var room = Model.Room;
+    var hasPlan = !string.IsNullOrWhiteSpace(room.FloorPlanImagePath);
+    var anchorsJson = JsonSerializer.Serialize(Model.Anchors.Select(a => new { name = a.Name, x = a.X, y = a.Y }));
+    var initialUrl = hasPlan ? room.FloorPlanImagePath : null;
+    // If nothing is calibrated yet we open the "Fine-tune" section closed by default,
+    // but expand it when values are already set so the user can see them at a glance.
+    var showFineTune = room.FloorPlanRotationDeg is > 0 or < 0
+                       || (room.FloorPlanOpacity is not null && Math.Abs((room.FloorPlanOpacity ?? 0.7) - 0.7) > 0.001)
+                       || (room.FloorPlanScale is not null && room.FloorPlanScale != 1.0 && room.FloorPlanScale != 0.0);
 }
 
-<h1>Edit room layout</h1>
+@section Styles {
+    <style>
+        .layout-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 1.05fr); gap: 1.5rem; align-items: start; }
+        @@media (max-width: 1100px) { .layout-grid { grid-template-columns: 1fr; } }
 
-<h4>Room layout</h4>
-<hr />
-<div class="row">
-    <div class="col-md-6">
+        .preview-col { position: sticky; top: 1rem; }
+
+        .form-section { border: 1px solid #e2e6ea; border-radius: 8px; padding: 1rem 1.15rem; background: #fdfdfe; margin-bottom: 1rem; }
+        .form-section h5 { margin-top: 0; margin-bottom: .75rem; }
+        .form-section .section-hint { color: #6c7a86; font-size: .85rem; margin-bottom: .9rem; }
+
+        .field-hint { color: #6c7a86; font-size: .8rem; margin-top: .2rem; }
+
+        details.fine-tune summary { cursor: pointer; font-weight: 600; padding: .35rem 0; color: #4a5560; }
+        details.fine-tune[open] summary { margin-bottom: .5rem; }
+
+        .slider-row { display: grid; grid-template-columns: 1fr 5.5rem; gap: .5rem; align-items: center; }
+
+        .url-fallback summary { color: #245c8a; font-size: .85rem; cursor: pointer; }
+        .url-fallback[open] { margin-top: .5rem; }
+
+        /* ---------- Live preview ---------- */
+        .fp-preview { }
+        .fp-preview-canvas {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            border: 1px solid #cfd6dd;
+            border-radius: 8px;
+            background: #fbfcfd;
+            overflow: hidden;
+        }
+        /* Inner box sized to the world's aspect ratio (letterboxed in the canvas).
+           JS sets width/height/left/top; the grid lives here so 1 m squares stay square. */
+        .fp-preview-content {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background:
+                linear-gradient(#eef2f5 1px, transparent 1px),
+                linear-gradient(90deg, #eef2f5 1px, transparent 1px);
+            background-size: 40px 40px;
+            outline: 1px dashed rgba(154, 167, 179, .35);
+            outline-offset: -1px;
+        }
+        .fp-preview-img {
+            position: absolute;
+            pointer-events: none;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+        .fp-preview-anchors { position: absolute; inset: 0; pointer-events: none; }
+        .fp-preview-anchor {
+            position: absolute;
+            width: 12px; height: 12px;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            background: #245c8a;
+            border: 2px solid white;
+            box-shadow: 0 0 0 2px rgba(36, 92, 138, .25);
+        }
+        .fp-preview-anchor > span {
+            position: absolute;
+            top: 100%; left: 50%;
+            transform: translateX(-50%);
+            margin-top: 2px;
+            font-size: .7rem;
+            font-weight: 700;
+            color: #245c8a;
+            white-space: nowrap;
+        }
+        .fp-preview-axis-x, .fp-preview-axis-y {
+            position: absolute; color: #66717c; font-size: .75rem; font-weight: 700;
+            pointer-events: none; background: rgba(251,252,253,.85); padding: 0 .25rem; border-radius: 3px;
+        }
+        .fp-preview-axis-x { right: .5rem; bottom: .35rem; }
+        .fp-preview-axis-y { left: .5rem; top: .35rem; }
+        .fp-preview-scalebar {
+            position: absolute; left: .5rem; bottom: .35rem;
+            display: flex; align-items: center; gap: .35rem;
+            color: #4a5560; font-size: .75rem; font-weight: 600;
+            background: rgba(251,252,253,.85); padding: 2px 6px; border-radius: 3px;
+        }
+        .fp-preview-scalebar-line { display: inline-block; height: 4px; background: #4a5560; min-width: 20px; border-radius: 2px; }
+        .fp-preview-empty {
+            position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            text-align: center; padding: 1rem;
+            color: #8b95a0; font-size: .9rem;
+        }
+        .fp-preview-status { min-height: 1.2em; }
+    </style>
+}
+
+<div class="d-flex justify-content-between align-items-baseline flex-wrap gap-2 mb-3">
+    <h1 class="mb-0">Edit room layout</h1>
+    <div>
+        <a asp-action="Details" asp-route-id="@room.Id" class="btn btn-outline-secondary btn-sm">Back to room</a>
+        <a asp-action="Index" class="btn btn-outline-secondary btn-sm">All rooms</a>
+    </div>
+</div>
+
+<div class="layout-grid">
+    <div>
         <form asp-action="Edit" enctype="multipart/form-data">
             <div asp-validation-summary="ModelOnly" class="text-danger"></div>
-            <input type="hidden" asp-for="Id" />
+            <input type="hidden" name="Id" value="@room.Id" />
 
-            <div class="form-group">
-                <label asp-for="Name" class="control-label"></label>
-                <input asp-for="Name" class="form-control" />
-                <span asp-validation-for="Name" class="text-danger"></span>
-            </div>
-            <div class="form-group">
-                <label asp-for="Description" class="control-label"></label>
-                <input asp-for="Description" class="form-control" />
-                <span asp-validation-for="Description" class="text-danger"></span>
-            </div>
-            <div class="form-group">
-                <label asp-for="PlannedDurationSeconds" class="control-label"></label>
-                <input asp-for="PlannedDurationSeconds" class="form-control" />
-                <span asp-validation-for="PlannedDurationSeconds" class="text-danger"></span>
-            </div>
-
-            <hr />
-            <h5>Floor plan overlay <small class="text-muted">(optional)</small></h5>
-            <p class="text-muted small mb-3">
-                Upload a floor plan image (PNG / JPG / SVG) and describe the real-world rectangle
-                it covers. The image will be drawn behind anchors and tags on the live view,
-                using the same X/Y meter coordinates.
-            </p>
-
-            @if (hasPlan)
-            {
-                <div class="mb-3">
-                    <label class="control-label">Current image</label>
-                    <div class="border rounded p-2 bg-light" style="max-width: 320px;">
-                        <img src="@Model.FloorPlanImagePath" alt="Current floor plan"
-                             style="max-width: 100%; height: auto;" />
-                    </div>
-                    <small class="text-muted d-block mt-1"><code>@Model.FloorPlanImagePath</code></small>
+            <div class="form-section">
+                <h5>Room basics</h5>
+                <div class="form-group mb-2">
+                    <label for="Name" class="control-label">Name</label>
+                    <input type="text" id="Name" name="Name" class="form-control" value="@room.Name" />
+                    <span asp-validation-for="Room.Name" class="text-danger"></span>
                 </div>
-            }
-
-            <div class="form-group">
-                <label for="floorPlanFile" class="control-label">
-                    @(hasPlan ? "Replace image (leave empty to keep current)" : "Upload image")
-                </label>
-                <input type="file" name="floorPlanFile" id="floorPlanFile"
-                       accept=".png,.jpg,.jpeg,.svg,.webp,.gif" class="form-control" />
-            </div>
-
-            <div class="form-group">
-                <label asp-for="FloorPlanImagePath" class="control-label">
-                    ...or web path (advanced, e.g. <code>/maps/ico_3.korrus-1.png</code>)
-                </label>
-                <input asp-for="FloorPlanImagePath" class="form-control" />
-                <span asp-validation-for="FloorPlanImagePath" class="text-danger"></span>
-            </div>
-
-            <div class="row">
-                <div class="col-6">
-                    <div class="form-group">
-                        <label asp-for="FloorPlanOriginXMeters" class="control-label">
-                            Origin X (m) — world X at image LEFT edge
-                        </label>
-                        <input asp-for="FloorPlanOriginXMeters" type="number" step="any" class="form-control" />
-                        <span asp-validation-for="FloorPlanOriginXMeters" class="text-danger"></span>
-                    </div>
+                <div class="form-group mb-2">
+                    <label for="Description" class="control-label">Description</label>
+                    <input type="text" id="Description" name="Description" class="form-control" value="@room.Description" />
+                    <span asp-validation-for="Room.Description" class="text-danger"></span>
                 </div>
-                <div class="col-6">
-                    <div class="form-group">
-                        <label asp-for="FloorPlanOriginYMeters" class="control-label">
-                            Origin Y (m) — world Y at image BOTTOM edge
-                        </label>
-                        <input asp-for="FloorPlanOriginYMeters" type="number" step="any" class="form-control" />
-                        <span asp-validation-for="FloorPlanOriginYMeters" class="text-danger"></span>
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="form-group">
-                        <label asp-for="FloorPlanWidthMeters" class="control-label">Width (m)</label>
-                        <input asp-for="FloorPlanWidthMeters" type="number" step="any" class="form-control" />
-                        <span asp-validation-for="FloorPlanWidthMeters" class="text-danger"></span>
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="form-group">
-                        <label asp-for="FloorPlanHeightMeters" class="control-label">Height (m)</label>
-                        <input asp-for="FloorPlanHeightMeters" type="number" step="any" class="form-control" />
-                        <span asp-validation-for="FloorPlanHeightMeters" class="text-danger"></span>
-                    </div>
-                </div>
-                <div class="col-12">
-                    <div class="form-group">
-                        <label asp-for="FloorPlanScale" class="control-label">
-                            Drawing scale (1 : N)
-                        </label>
-                        <input asp-for="FloorPlanScale" type="number" step="any" min="0" class="form-control"
-                               placeholder="1 (leave empty if width/height are already real-world)" />
-                        <small class="form-text text-muted">
-                            If the image is a scaled drawing, enter the scale factor <em>N</em>
-                            (e.g. <code>100</code> for a 1:100 drawing). The real-world extent
-                            of the plan is <code>Width × N</code> by <code>Height × N</code>.
-                            Leave empty or set to <code>1</code> when Width/Height are already
-                            in real-world units.
-                        </small>
-                        <span asp-validation-for="FloorPlanScale" class="text-danger"></span>
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="form-group">
-                        <label asp-for="FloorPlanRotationDeg" class="control-label">Rotation (deg, CW)</label>
-                        <input asp-for="FloorPlanRotationDeg" type="number" step="any" class="form-control" />
-                        <span asp-validation-for="FloorPlanRotationDeg" class="text-danger"></span>
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="form-group">
-                        <label asp-for="FloorPlanOpacity" class="control-label">Opacity (0..1)</label>
-                        <input asp-for="FloorPlanOpacity" type="number" step="0.05" min="0" max="1" class="form-control" />
-                        <span asp-validation-for="FloorPlanOpacity" class="text-danger"></span>
-                    </div>
+                <div class="form-group mb-0">
+                    <label for="PlannedDurationSeconds" class="control-label">Planned duration (s)</label>
+                    <input type="number" id="PlannedDurationSeconds" name="PlannedDurationSeconds" class="form-control" value="@room.PlannedDurationSeconds" />
+                    <span asp-validation-for="Room.PlannedDurationSeconds" class="text-danger"></span>
                 </div>
             </div>
 
-            @if (hasPlan)
-            {
-                <div class="form-check mt-2">
-                    <input class="form-check-input" type="checkbox" name="removeFloorPlan" value="true" id="removeFloorPlan" />
-                    <label class="form-check-label" for="removeFloorPlan">
-                        Remove floor plan overlay (clears image + calibration)
+            <div class="form-section">
+                <h5>Floor plan image <small class="text-muted fw-normal">(optional)</small></h5>
+                <p class="section-hint">
+                    Upload a picture of your room — a photo, a screenshot, or a blueprint.
+                    The preview on the right shows exactly where it will sit under the anchors.
+                </p>
+
+                @if (hasPlan)
+                {
+                    <div class="mb-3">
+                        <label class="control-label small text-muted">Current image</label>
+                        <div class="border rounded p-2 bg-light" style="max-width: 260px;">
+                            <img src="@room.FloorPlanImagePath" alt="Current floor plan"
+                                 style="max-width: 100%; height: auto;" />
+                        </div>
+                    </div>
+                }
+
+                <div class="form-group mb-2">
+                    <label for="floorPlanFile" class="control-label">
+                        @(hasPlan ? "Replace image" : "Choose an image")
+                        <small class="text-muted fw-normal">(PNG · JPG · SVG · WEBP · GIF)</small>
                     </label>
+                    <input type="file" name="floorPlanFile" id="floorPlanFile"
+                           accept=".png,.jpg,.jpeg,.svg,.webp,.gif" class="form-control" />
+                    @if (hasPlan)
+                    {
+                        <div class="field-hint">Leave empty to keep the current image.</div>
+                    }
+                </div>
+
+                <details class="url-fallback">
+                    <summary>Or point at an image already on the server (advanced)</summary>
+                    <div class="mt-2">
+                        <input type="text" name="FloorPlanImagePath" class="form-control"
+                               value="@room.FloorPlanImagePath"
+                               placeholder="/maps/example.png" />
+                        <span asp-validation-for="Room.FloorPlanImagePath" class="text-danger"></span>
+                        <div class="field-hint">
+                            Only needed when your image is hosted at a fixed path
+                            (e.g. <code>/maps/ico_3.korrus-1.png</code>). Uploading a file above overrides this.
+                        </div>
+                    </div>
+                </details>
+            </div>
+
+            <div class="form-section">
+                <h5>Where does the image sit in the room?</h5>
+                <p class="section-hint">
+                    Anchor coordinates are in meters. Tell the app where the image's
+                    <strong>bottom-left corner</strong> is, and how big the area it covers is —
+                    the preview updates as you type.
+                </p>
+
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label for="FloorPlanOriginXMeters" class="control-label">Left-edge X (m)</label>
+                        <input type="number" step="any" id="FloorPlanOriginXMeters" name="FloorPlanOriginXMeters"
+                               class="form-control" placeholder="0" value="@room.FloorPlanOriginXMeters" />
+                        <div class="field-hint">World X of the image's left edge.</div>
+                    </div>
+                    <div class="col-6">
+                        <label for="FloorPlanOriginYMeters" class="control-label">Bottom-edge Y (m)</label>
+                        <input type="number" step="any" id="FloorPlanOriginYMeters" name="FloorPlanOriginYMeters"
+                               class="form-control" placeholder="0" value="@room.FloorPlanOriginYMeters" />
+                        <div class="field-hint">World Y of the image's bottom edge.</div>
+                    </div>
+                    <div class="col-6">
+                        <label for="FloorPlanWidthMeters" class="control-label">Width (m)</label>
+                        <input type="number" step="any" min="0" id="FloorPlanWidthMeters" name="FloorPlanWidthMeters"
+                               class="form-control" placeholder="10" value="@room.FloorPlanWidthMeters" />
+                        <div class="field-hint">How wide the area covered by the image is.</div>
+                    </div>
+                    <div class="col-6">
+                        <label for="FloorPlanHeightMeters" class="control-label">Height (m)</label>
+                        <input type="number" step="any" min="0" id="FloorPlanHeightMeters" name="FloorPlanHeightMeters"
+                               class="form-control" placeholder="—" value="@room.FloorPlanHeightMeters" />
+                        <div class="field-hint">How tall that area is. Auto-filled from image aspect.</div>
+                    </div>
+                </div>
+            </div>
+
+            <details class="fine-tune form-section" @(showFineTune ? "open" : "")>
+                <summary>Fine-tune (rotation, opacity, scale)</summary>
+
+                <div class="mt-2 mb-3">
+                    <label for="FloorPlanRotationDeg" class="control-label">
+                        Rotation <span class="text-muted">— clockwise degrees</span>
+                    </label>
+                    <div class="slider-row">
+                        <input type="range" id="rotationSlider" min="-180" max="180" step="1" value="@(room.FloorPlanRotationDeg ?? 0)" class="form-range" />
+                        <input type="number" step="any" id="FloorPlanRotationDeg" name="FloorPlanRotationDeg"
+                               class="form-control form-control-sm" value="@room.FloorPlanRotationDeg" />
+                    </div>
+                    <span asp-validation-for="Room.FloorPlanRotationDeg" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label for="FloorPlanOpacity" class="control-label">
+                        Opacity <span class="text-muted">— how transparent the overlay is</span>
+                    </label>
+                    <div class="slider-row">
+                        <input type="range" id="opacitySlider" min="0" max="1" step="0.05" value="@(room.FloorPlanOpacity ?? 0.7)" class="form-range" />
+                        <input type="number" step="0.05" min="0" max="1" id="FloorPlanOpacity" name="FloorPlanOpacity"
+                               class="form-control form-control-sm" value="@room.FloorPlanOpacity" />
+                    </div>
+                    <span asp-validation-for="Room.FloorPlanOpacity" class="text-danger"></span>
+                </div>
+
+                <div class="mb-0">
+                    <label for="FloorPlanScale" class="control-label">
+                        Drawing scale (1 : N) <span class="text-muted">— for blueprints</span>
+                    </label>
+                    <input type="number" step="any" min="0" id="FloorPlanScale" name="FloorPlanScale"
+                           class="form-control" placeholder="1" value="@room.FloorPlanScale" />
+                    <div class="field-hint">
+                        Leave empty (or <code>1</code>) if Width/Height above are already in real meters.
+                        Set to <code>100</code> for a 1:100 blueprint where Width/Height are drawn-cm.
+                    </div>
+                    <span asp-validation-for="Room.FloorPlanScale" class="text-danger"></span>
+                </div>
+            </details>
+
+            @if (hasPlan)
+            {
+                <div class="form-section">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="removeFloorPlan" value="true" id="removeFloorPlan" />
+                        <label class="form-check-label" for="removeFloorPlan">
+                            <strong>Remove the floor plan</strong>
+                            <span class="text-muted d-block small">Clears the image and all calibration values.</span>
+                        </label>
+                    </div>
                 </div>
             }
 
             <div class="form-group mt-3">
                 <input type="submit" value="Save" class="btn btn-primary" />
-                <a asp-action="Index" class="btn btn-secondary">Cancel</a>
+                <a asp-action="Details" asp-route-id="@room.Id" class="btn btn-secondary">Cancel</a>
             </div>
         </form>
     </div>
+
+    <div class="preview-col">
+        <h5 class="mb-2">Preview</h5>
+        <div id="floorplanPreview"></div>
+        @if (Model.Anchors.Count > 0)
+        {
+            <div class="field-hint mt-2">
+                Blue dots are anchors already placed in this room. Line the image up so the room features match the dot positions.
+            </div>
+        }
+        else
+        {
+            <div class="field-hint mt-2">
+                No anchors in this room yet. Once anchors are added, they'll show as reference dots here.
+            </div>
+        }
+    </div>
 </div>
 
-<div>
-    <a asp-action="Index">Back to List</a>
-</div>
+<script src="~/js/floor-plan-preview.js" asp-append-version="true"></script>
+<script>
+    (function () {
+        const form = document.querySelector('form[enctype="multipart/form-data"]');
+        if (!form) return;
+
+        const fields = {
+            file:    document.getElementById('floorPlanFile'),
+            urlPath: form.querySelector('[name="FloorPlanImagePath"]'),
+            ox:      form.querySelector('[name="FloorPlanOriginXMeters"]'),
+            oy:      form.querySelector('[name="FloorPlanOriginYMeters"]'),
+            w:       form.querySelector('[name="FloorPlanWidthMeters"]'),
+            h:       form.querySelector('[name="FloorPlanHeightMeters"]'),
+            scale:   form.querySelector('[name="FloorPlanScale"]'),
+            rot:     form.querySelector('[name="FloorPlanRotationDeg"]'),
+            opacity: form.querySelector('[name="FloorPlanOpacity"]'),
+            remove:  document.getElementById('removeFloorPlan'),
+        };
+
+        // Sync sliders <-> number inputs.
+        function link(slider, number) {
+            if (!slider || !number) return;
+            slider.addEventListener('input', () => { number.value = slider.value; number.dispatchEvent(new Event('input', { bubbles: true })); });
+            number.addEventListener('input', () => {
+                const v = parseFloat(number.value);
+                if (Number.isFinite(v)) slider.value = v;
+            });
+        }
+        link(document.getElementById('rotationSlider'), fields.rot);
+        link(document.getElementById('opacitySlider'),  fields.opacity);
+
+        FloorPlanPreview.mount(document.getElementById('floorplanPreview'), {
+            anchors:    @Html.Raw(anchorsJson),
+            fields:     fields,
+            initialUrl: @Html.Raw(JsonSerializer.Serialize(initialUrl)),
+        });
+    })();
+</script>
 
 @section Scripts {
     @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}

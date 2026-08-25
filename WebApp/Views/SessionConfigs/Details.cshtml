@@ -62,8 +62,15 @@
         @await Html.PartialAsync("_PositionPlane", Model.Plane)
         @if (!hasFloorPlan)
         {
-            <div class="floor-plan-hint">
-                Tip: upload a floor plan via <a asp-action="Edit" asp-route-id="@room.Id">Edit room</a> to add visual context underneath the anchors.
+            <div class="floor-plan-cta card p-3 mt-2 d-flex flex-row align-items-center gap-3">
+                <div class="flex-grow-1">
+                    <strong>Add a floor plan photo</strong>
+                    <div class="room-meta small">
+                        Drop in a picture, screenshot, or blueprint of the room and see it laid under the anchors.
+                        Live preview shows you exactly where it lands.
+                    </div>
+                </div>
+                <a asp-action="Edit" asp-route-id="@room.Id" class="btn btn-primary btn-sm">Add floor plan</a>
             </div>
         }
     </section>
